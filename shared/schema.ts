@@ -29,9 +29,25 @@ export const protocolItems = pgTable("protocol_items", {
   id: serial("id").primaryKey(),
   protocolId: integer("protocol_id").references(() => protocols.id).notNull(),
   name: text("name").notNull(),
+  
+  // Supplement/Nutrition fields
   dosageAmount: integer("dosage_amount"), // numerical value like 500, 1000, 2
   dosageUnit: text("dosage_unit"), // mg, g, oz, ml, pills, drops, etc.
-  timing: text("timing").notNull(), // "08:00", "12:00", etc.
+  
+  // Fasting fields
+  startTime: text("start_time"), // "08:00"
+  endTime: text("end_time"), // "16:00" or null for live tracking
+  fastingType: text("fasting_type"), // "goal" or "live"
+  
+  // Exercise fields
+  sets: integer("sets"),
+  reps: integer("reps"),
+  duration: integer("duration"), // in minutes
+  restTime: integer("rest_time"), // in seconds
+  weight: integer("weight"), // in lbs/kg
+  
+  // General fields
+  timing: text("timing"), // "08:00", "12:00", etc.
   frequency: text("frequency").default("daily"), // daily, weekly, as_needed
   instructions: text("instructions"),
   order: integer("order").default(0),

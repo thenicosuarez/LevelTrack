@@ -1,8 +1,8 @@
-# FlyKit Tracker - Supplement & Health Management App
+# Nurtur Stack - Comprehensive Wellness Protocol Management App
 
 ## Overview
 
-FlyKit Tracker is a comprehensive web application designed to help users plan, track, and analyze their wellness regimens including supplements, fasting, workouts, meals, and habits. The app features a calendar-based interface with protocol management, task tracking, analytics, and user profile management.
+Nurtur Stack (also known as Holistica) is a comprehensive web application designed to help users plan, track, and analyze their wellness regimens including supplements, fasting, workouts, meals, and habits. The app features a calendar-based interface with protocol management, task tracking, analytics, and user profile management.
 
 ## User Preferences
 

@@ -38,8 +38,24 @@ const goals = [
 
 interface ProtocolItemForm {
   name: string;
+  
+  // Supplement/Nutrition fields
   dosageAmount: string;
   dosageUnit: string;
+  
+  // Fasting fields
+  startTime: string;
+  endTime: string;
+  fastingType: string;
+  
+  // Exercise fields
+  sets: string;
+  reps: string;
+  duration: string;
+  restTime: string;
+  weight: string;
+  
+  // General fields
   timing: string;
   frequency: string;
   instructions: string;
@@ -53,8 +69,25 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
   const [protocolName, setProtocolName] = useState("");
   const [protocolDescription, setProtocolDescription] = useState("");
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const getDefaultProtocolItem = (): ProtocolItemForm => ({
+    name: "",
+    dosageAmount: "",
+    dosageUnit: "mg",
+    startTime: "08:00",
+    endTime: "",
+    fastingType: "goal",
+    sets: "",
+    reps: "",
+    duration: "",
+    restTime: "",
+    weight: "",
+    timing: "08:00",
+    frequency: "daily",
+    instructions: ""
+  });
+
   const [protocolItems, setProtocolItems] = useState<ProtocolItemForm[]>([
-    { name: "", dosageAmount: "", dosageUnit: "mg", timing: "08:00", frequency: "daily", instructions: "" }
+    getDefaultProtocolItem()
   ]);
 
   const createProtocolMutation = useMutation({
@@ -103,14 +136,45 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
       return;
     }
 
-    const validItems = protocolItems.filter(item => item.name.trim());
-    if (validItems.length === 0) {
-      toast({
-        title: "Error",
-        description: "At least one protocol item is required",
-        variant: "destructive",
-      });
-      return;
+    // Validate items based on category
+    let validItems;
+    if (selectedCategory === "fasting") {
+      // For fasting, we need at least a start time
+      if (!protocolItems[0]?.startTime) {
+        toast({
+          title: "Error",
+          description: "Please set a start time for fasting",
+          variant: "destructive",
+        });
+        return;
+      }
+      validItems = [{
+        name: "Fasting",
+        startTime: protocolItems[0].startTime,
+        endTime: protocolItems[0].endTime,
+        fastingType: protocolItems[0].fastingType,
+        frequency: protocolItems[0].frequency,
+        timing: protocolItems[0].startTime,
+        dosageAmount: "",
+        dosageUnit: "",
+        sets: "",
+        reps: "",
+        duration: "",
+        restTime: "",
+        weight: "",
+        instructions: "",
+      }];
+    } else {
+      // For other categories, validate items normally
+      validItems = protocolItems.filter(item => item.name.trim());
+      if (validItems.length === 0) {
+        toast({
+          title: "Error",
+          description: "At least one protocol item is required",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
@@ -130,6 +194,11 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
           items: validItems.map(item => ({
             ...item,
             dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+            sets: item.sets ? parseInt(item.sets) : null,
+            reps: item.reps ? parseInt(item.reps) : null,
+            duration: item.duration ? parseInt(item.duration) : null,
+            restTime: item.restTime ? parseInt(item.restTime) : null,
+            weight: item.weight ? parseInt(item.weight) : null,
           }))
         });
       }
@@ -143,16 +212,14 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
     setProtocolDescription("");
     setSelectedGoals([]);
     setProtocolItems([
-      { name: "", dosageAmount: "", dosageUnit: "mg", timing: "08:00", frequency: "daily", instructions: "" }
+      getDefaultProtocolItem()
     ]);
     setSelectedCategory("supplements");
     onClose();
   };
 
   const addProtocolItem = () => {
-    setProtocolItems([...protocolItems, 
-      { name: "", dosageAmount: "", dosageUnit: "mg", timing: "08:00", frequency: "daily", instructions: "" }
-    ]);
+    setProtocolItems([...protocolItems, getDefaultProtocolItem()]);
   };
 
   const removeProtocolItem = (index: number) => {
@@ -191,7 +258,11 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
                     ? "border-primary bg-primary/10" 
                     : "border-gray-200 hover:border-gray-300"
                 }`}
-                onClick={() => setSelectedCategory(id)}
+                onClick={() => {
+                  setSelectedCategory(id);
+                  // Reset protocol items when switching categories
+                  setProtocolItems([getDefaultProtocolItem()]);
+                }}
               >
                 <CardContent className="flex flex-col items-center space-y-2 p-4">
                   <Icon className={selectedCategory === id ? "text-primary" : "text-gray-600"} size={24} />
@@ -230,107 +301,240 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
             </div>
           </div>
 
-          {/* Protocol Items */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Items</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addProtocolItem}>
-                <Plus size={16} className="mr-1" />
-                Add Item
-              </Button>
-            </div>
-
-            {protocolItems.map((item, index) => (
-              <Card key={index} className="p-4">
+          {/* Protocol Items - Category Specific */}
+          {selectedCategory === "fasting" ? (
+            <div className="space-y-3">
+              <Label>Fasting Schedule</Label>
+              <Card className="p-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Item {index + 1}</Label>
-                    {protocolItems.length > 1 && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => removeProtocolItem(index)}
-                      >
-                        <Trash2 size={16} className="text-red-500" />
-                      </Button>
-                    )}
-                  </div>
-
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor={`item-name-${index}`} className="text-xs">Name</Label>
+                      <Label htmlFor="fast-start-time" className="text-xs">Start Time</Label>
                       <Input
-                        id={`item-name-${index}`}
-                        placeholder="Supplement name"
-                        value={item.name}
-                        onChange={(e) => updateProtocolItem(index, "name", e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`item-dosage-${index}`} className="text-xs">Dosage</Label>
-                      <div className="flex space-x-2">
-                        <Input
-                          id={`item-dosage-${index}`}
-                          placeholder="500"
-                          type="number"
-                          value={item.dosageAmount}
-                          onChange={(e) => updateProtocolItem(index, "dosageAmount", e.target.value)}
-                          className="flex-1"
-                        />
-                        <Select 
-                          value={item.dosageUnit} 
-                          onValueChange={(value) => updateProtocolItem(index, "dosageUnit", value)}
-                        >
-                          <SelectTrigger className="w-20">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="mg">mg</SelectItem>
-                            <SelectItem value="g">g</SelectItem>
-                            <SelectItem value="mcg">mcg</SelectItem>
-                            <SelectItem value="ml">ml</SelectItem>
-                            <SelectItem value="oz">oz</SelectItem>
-                            <SelectItem value="capsules">caps</SelectItem>
-                            <SelectItem value="tablets">tabs</SelectItem>
-                            <SelectItem value="drops">drops</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor={`item-timing-${index}`} className="text-xs">Time</Label>
-                      <Input
-                        id={`item-timing-${index}`}
+                        id="fast-start-time"
                         type="time"
-                        value={item.timing}
-                        onChange={(e) => updateProtocolItem(index, "timing", e.target.value)}
+                        value={protocolItems[0]?.startTime || "08:00"}
+                        onChange={(e) => updateProtocolItem(0, "startTime", e.target.value)}
                       />
                     </div>
                     <div>
-                      <Label htmlFor={`item-frequency-${index}`} className="text-xs">Frequency</Label>
+                      <Label htmlFor="fast-type" className="text-xs">Type</Label>
                       <Select 
-                        value={item.frequency} 
-                        onValueChange={(value) => updateProtocolItem(index, "frequency", value)}
+                        value={protocolItems[0]?.fastingType || "goal"} 
+                        onValueChange={(value) => updateProtocolItem(0, "fastingType", value)}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="as_needed">As Needed</SelectItem>
+                          <SelectItem value="goal">Goal (Set End Time)</SelectItem>
+                          <SelectItem value="live">Live Tracking</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                  
+                  {protocolItems[0]?.fastingType === "goal" && (
+                    <div>
+                      <Label htmlFor="fast-end-time" className="text-xs">End Time</Label>
+                      <Input
+                        id="fast-end-time"
+                        type="time"
+                        value={protocolItems[0]?.endTime || ""}
+                        onChange={(e) => updateProtocolItem(0, "endTime", e.target.value)}
+                      />
+                    </div>
+                  )}
+                  
+                  <div>
+                    <Label htmlFor="fast-frequency" className="text-xs">Frequency</Label>
+                    <Select 
+                      value={protocolItems[0]?.frequency || "daily"} 
+                      onValueChange={(value) => updateProtocolItem(0, "frequency", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="as_needed">As Needed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </Card>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label>
+                  {selectedCategory === "supplements" ? "Supplements" : 
+                   selectedCategory === "nutrition" ? "Foods" : 
+                   selectedCategory === "exercise" ? "Exercises" : "Items"}
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={addProtocolItem}>
+                  <Plus size={16} className="mr-1" />
+                  Add Item
+                </Button>
+              </div>
+
+              {protocolItems.map((item, index) => (
+                <Card key={index} className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">
+                        {selectedCategory === "supplements" ? `Supplement ${index + 1}` : 
+                         selectedCategory === "nutrition" ? `Food ${index + 1}` : 
+                         selectedCategory === "exercise" ? `Exercise ${index + 1}` : `Item ${index + 1}`}
+                      </Label>
+                      {protocolItems.length > 1 && (
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => removeProtocolItem(index)}
+                        >
+                          <Trash2 size={16} className="text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor={`item-name-${index}`} className="text-xs">
+                          {selectedCategory === "supplements" ? "Supplement Name" : 
+                           selectedCategory === "nutrition" ? "Food Name" : 
+                           selectedCategory === "exercise" ? "Exercise Name" : "Name"}
+                        </Label>
+                        <Input
+                          id={`item-name-${index}`}
+                          placeholder={selectedCategory === "supplements" ? "e.g., Omega 3" : 
+                                     selectedCategory === "nutrition" ? "e.g., Oatmeal" : 
+                                     selectedCategory === "exercise" ? "e.g., Push-ups" : "Name"}
+                          value={item.name}
+                          onChange={(e) => updateProtocolItem(index, "name", e.target.value)}
+                        />
+                      </div>
+                      
+                      {selectedCategory === "exercise" ? (
+                        <div>
+                          <Label htmlFor={`item-duration-${index}`} className="text-xs">Duration (minutes)</Label>
+                          <Input
+                            id={`item-duration-${index}`}
+                            placeholder="30"
+                            type="number"
+                            value={item.duration}
+                            onChange={(e) => updateProtocolItem(index, "duration", e.target.value)}
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <Label htmlFor={`item-dosage-${index}`} className="text-xs">
+                            {selectedCategory === "nutrition" ? "Portion" : "Dosage"}
+                          </Label>
+                          <div className="flex space-x-2">
+                            <Input
+                              id={`item-dosage-${index}`}
+                              placeholder="500"
+                              type="number"
+                              value={item.dosageAmount}
+                              onChange={(e) => updateProtocolItem(index, "dosageAmount", e.target.value)}
+                              className="flex-1"
+                            />
+                            <Select 
+                              value={item.dosageUnit} 
+                              onValueChange={(value) => updateProtocolItem(index, "dosageUnit", value)}
+                            >
+                              <SelectTrigger className="w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="mg">mg</SelectItem>
+                                <SelectItem value="g">g</SelectItem>
+                                <SelectItem value="mcg">mcg</SelectItem>
+                                <SelectItem value="ml">ml</SelectItem>
+                                <SelectItem value="oz">oz</SelectItem>
+                                <SelectItem value="capsules">caps</SelectItem>
+                                <SelectItem value="tablets">tabs</SelectItem>
+                                <SelectItem value="drops">drops</SelectItem>
+                                <SelectItem value="cups">cups</SelectItem>
+                                <SelectItem value="tbsp">tbsp</SelectItem>
+                                <SelectItem value="tsp">tsp</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedCategory === "exercise" && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label htmlFor={`item-sets-${index}`} className="text-xs">Sets</Label>
+                          <Input
+                            id={`item-sets-${index}`}
+                            placeholder="3"
+                            type="number"
+                            value={item.sets}
+                            onChange={(e) => updateProtocolItem(index, "sets", e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`item-reps-${index}`} className="text-xs">Reps</Label>
+                          <Input
+                            id={`item-reps-${index}`}
+                            placeholder="10"
+                            type="number"
+                            value={item.reps}
+                            onChange={(e) => updateProtocolItem(index, "reps", e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`item-weight-${index}`} className="text-xs">Weight (lbs)</Label>
+                          <Input
+                            id={`item-weight-${index}`}
+                            placeholder="50"
+                            type="number"
+                            value={item.weight}
+                            onChange={(e) => updateProtocolItem(index, "weight", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor={`item-timing-${index}`} className="text-xs">Time</Label>
+                        <Input
+                          id={`item-timing-${index}`}
+                          type="time"
+                          value={item.timing}
+                          onChange={(e) => updateProtocolItem(index, "timing", e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`item-frequency-${index}`} className="text-xs">Frequency</Label>
+                        <Select 
+                          value={item.frequency} 
+                          onValueChange={(value) => updateProtocolItem(index, "frequency", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="as_needed">As Needed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* Goals */}
           <div>
