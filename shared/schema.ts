@@ -1,0 +1,123 @@
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  avatar: text("avatar"),
+  streak: integer("streak").default(0),
+  totalCompliance: integer("total_compliance").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const protocols = pgTable("protocols", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull(), // supplements, fasting, exercise, nutrition
+  isActive: boolean("is_active").default(true),
+  color: text("color").default("#14B8A6"),
+  goals: text("goals").array().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const protocolItems = pgTable("protocol_items", {
+  id: serial("id").primaryKey(),
+  protocolId: integer("protocol_id").references(() => protocols.id).notNull(),
+  name: text("name").notNull(),
+  dosageAmount: integer("dosage_amount"), // numerical value like 500, 1000, 2
+  dosageUnit: text("dosage_unit"), // mg, g, oz, ml, pills, drops, etc.
+  timing: text("timing").notNull(), // "08:00", "12:00", etc.
+  frequency: text("frequency").default("daily"), // daily, weekly, as_needed
+  instructions: text("instructions"),
+  order: integer("order").default(0),
+});
+
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  protocolId: integer("protocol_id").references(() => protocols.id).notNull(),
+  protocolItemId: integer("protocol_item_id").references(() => protocolItems.id).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD format
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+});
+
+export const healthMetrics = pgTable("health_metrics", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(),
+  sleepHours: integer("sleep_hours"),
+  mood: text("mood"), // good, fair, poor
+  energy: integer("energy"), // 1-10
+  stress: integer("stress"), // 1-10
+  weight: integer("weight"), // in grams
+  heartRate: integer("heart_rate"),
+  steps: integer("steps"),
+  source: text("source"), // oura, myfitnesspal, manual
+  rawData: jsonb("raw_data"),
+});
+
+export const integrations = pgTable("integrations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  platform: text("platform").notNull(), // oura, myfitnesspal, calai, carbon
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  isActive: boolean("is_active").default(true),
+  lastSync: timestamp("last_sync"),
+  settings: jsonb("settings"),
+});
+
+// Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProtocolSchema = createInsertSchema(protocols).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProtocolItemSchema = createInsertSchema(protocolItems).omit({
+  id: true,
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).omit({
+  id: true,
+  completedAt: true,
+});
+
+export const insertHealthMetricSchema = createInsertSchema(healthMetrics).omit({
+  id: true,
+});
+
+export const insertIntegrationSchema = createInsertSchema(integrations).omit({
+  id: true,
+  lastSync: true,
+});
+
+// Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type Protocol = typeof protocols.$inferSelect;
+export type InsertProtocol = z.infer<typeof insertProtocolSchema>;
+
+export type ProtocolItem = typeof protocolItems.$inferSelect;
+export type InsertProtocolItem = z.infer<typeof insertProtocolItemSchema>;
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+
+export type HealthMetric = typeof healthMetrics.$inferSelect;
+export type InsertHealthMetric = z.infer<typeof insertHealthMetricSchema>;
+
+export type Integration = typeof integrations.$inferSelect;
+export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;

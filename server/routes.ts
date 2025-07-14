@@ -1,0 +1,291 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { 
+  insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
+  insertHealthMetricSchema, insertIntegrationSchema 
+} from "@shared/schema";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  const currentUserId = 1; // For demo purposes
+
+  // User routes
+  app.get("/api/user", async (req, res) => {
+    try {
+      const user = await storage.getUser(currentUserId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  app.patch("/api/user", async (req, res) => {
+    try {
+      const user = await storage.updateUser(currentUserId, req.body);
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Protocol routes
+  app.get("/api/protocols", async (req, res) => {
+    try {
+      const protocols = await storage.getProtocols(currentUserId);
+      res.json(protocols);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protocols" });
+    }
+  });
+
+  app.get("/api/protocols/:id", async (req, res) => {
+    try {
+      const protocol = await storage.getProtocol(parseInt(req.params.id));
+      if (!protocol) {
+        return res.status(404).json({ error: "Protocol not found" });
+      }
+      res.json(protocol);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protocol" });
+    }
+  });
+
+  app.post("/api/protocols", async (req, res) => {
+    try {
+      const validatedData = insertProtocolSchema.parse({
+        ...req.body,
+        userId: currentUserId,
+      });
+      const protocol = await storage.createProtocol(validatedData);
+      res.json(protocol);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid protocol data" });
+    }
+  });
+
+  app.patch("/api/protocols/:id", async (req, res) => {
+    try {
+      const protocol = await storage.updateProtocol(parseInt(req.params.id), req.body);
+      res.json(protocol);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update protocol" });
+    }
+  });
+
+  app.delete("/api/protocols/:id", async (req, res) => {
+    try {
+      await storage.deleteProtocol(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol" });
+    }
+  });
+
+  // Protocol items routes
+  app.get("/api/protocols/:id/items", async (req, res) => {
+    try {
+      const items = await storage.getProtocolItems(parseInt(req.params.id));
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protocol items" });
+    }
+  });
+
+  app.post("/api/protocols/:id/items", async (req, res) => {
+    try {
+      const validatedData = insertProtocolItemSchema.parse({
+        ...req.body,
+        protocolId: parseInt(req.params.id),
+      });
+      const item = await storage.createProtocolItem(validatedData);
+      res.json(item);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid protocol item data" });
+    }
+  });
+
+  app.patch("/api/protocol-items/:id", async (req, res) => {
+    try {
+      const item = await storage.updateProtocolItem(parseInt(req.params.id), req.body);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update protocol item" });
+    }
+  });
+
+  app.delete("/api/protocol-items/:id", async (req, res) => {
+    try {
+      await storage.deleteProtocolItem(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol item" });
+    }
+  });
+
+  // Task routes
+  app.get("/api/tasks", async (req, res) => {
+    try {
+      const date = req.query.date as string;
+      const tasks = await storage.getTasks(currentUserId, date);
+      res.json(tasks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tasks" });
+    }
+  });
+
+  app.post("/api/tasks", async (req, res) => {
+    try {
+      const validatedData = insertTaskSchema.parse({
+        ...req.body,
+        userId: currentUserId,
+      });
+      const task = await storage.createTask(validatedData);
+      res.json(task);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid task data" });
+    }
+  });
+
+  app.patch("/api/tasks/:id", async (req, res) => {
+    try {
+      const task = await storage.updateTask(parseInt(req.params.id), req.body);
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update task" });
+    }
+  });
+
+  app.get("/api/tasks/range", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "Start date and end date are required" });
+      }
+      const tasks = await storage.getTasksForDateRange(currentUserId, startDate as string, endDate as string);
+      res.json(tasks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tasks for date range" });
+    }
+  });
+
+  // Health metrics routes
+  app.get("/api/health-metrics", async (req, res) => {
+    try {
+      const date = req.query.date as string;
+      const metrics = await storage.getHealthMetrics(currentUserId, date);
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch health metrics" });
+    }
+  });
+
+  app.post("/api/health-metrics", async (req, res) => {
+    try {
+      const validatedData = insertHealthMetricSchema.parse({
+        ...req.body,
+        userId: currentUserId,
+      });
+      const metric = await storage.createHealthMetric(validatedData);
+      res.json(metric);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid health metric data" });
+    }
+  });
+
+  app.get("/api/health-metrics/range", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "Start date and end date are required" });
+      }
+      const metrics = await storage.getHealthMetricsForDateRange(currentUserId, startDate as string, endDate as string);
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch health metrics for date range" });
+    }
+  });
+
+  // Integration routes
+  app.get("/api/integrations", async (req, res) => {
+    try {
+      const integrations = await storage.getIntegrations(currentUserId);
+      res.json(integrations);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch integrations" });
+    }
+  });
+
+  app.post("/api/integrations", async (req, res) => {
+    try {
+      const validatedData = insertIntegrationSchema.parse({
+        ...req.body,
+        userId: currentUserId,
+      });
+      const integration = await storage.createIntegration(validatedData);
+      res.json(integration);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid integration data" });
+    }
+  });
+
+  app.patch("/api/integrations/:id", async (req, res) => {
+    try {
+      const integration = await storage.updateIntegration(parseInt(req.params.id), req.body);
+      res.json(integration);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update integration" });
+    }
+  });
+
+  // Dashboard analytics
+  app.get("/api/analytics/dashboard", async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const [todayTasks, weekTasks, healthMetrics] = await Promise.all([
+        storage.getTasks(currentUserId, today),
+        storage.getTasksForDateRange(currentUserId, weekAgo, today),
+        storage.getHealthMetrics(currentUserId, today)
+      ]);
+
+      const todayCompleted = todayTasks.filter(t => t.completed).length;
+      const todayTotal = todayTasks.length;
+      const todayCompliance = todayTotal > 0 ? Math.round((todayCompleted / todayTotal) * 100) : 0;
+
+      const weekCompleted = weekTasks.filter(t => t.completed).length;
+      const weekTotal = weekTasks.length;
+      const weekCompliance = weekTotal > 0 ? Math.round((weekCompleted / weekTotal) * 100) : 0;
+
+      const latestMetrics = healthMetrics.length > 0 ? healthMetrics[0] : null;
+
+      res.json({
+        todayCompliance,
+        weekCompliance,
+        todayTasks: todayTasks.length,
+        completedTasks: todayCompleted,
+        sleepHours: latestMetrics?.sleepHours || 0,
+        mood: latestMetrics?.mood || 'fair',
+        energy: latestMetrics?.energy || 5,
+        weeklyData: Array.from({ length: 7 }, (_, i) => {
+          const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const dayTasks = weekTasks.filter(t => t.date === date);
+          const dayCompleted = dayTasks.filter(t => t.completed).length;
+          const dayTotal = dayTasks.length;
+          return {
+            date,
+            compliance: dayTotal > 0 ? Math.round((dayCompleted / dayTotal) * 100) : 0
+          };
+        }).reverse()
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch dashboard analytics" });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
