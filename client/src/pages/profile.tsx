@@ -256,7 +256,7 @@ export default function Profile() {
       <Card>
         <CardContent className="p-6">
           <div className="text-center text-sm text-gray-600">
-            <p>FlyKit Tracker v1.0.0</p>
+            <p>Nurtur Stack v1.0.0</p>
             <p className="mt-1">Built with 💚 for optimal health</p>
           </div>
         </CardContent>
