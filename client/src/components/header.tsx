@@ -16,7 +16,7 @@ export default function Header() {
           <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
             <FlaskConical className="text-white" size={16} />
           </div>
-          <h1 className="text-lg font-semibold text-slate-800">FlyKit Tracker</h1>
+          <h1 className="text-lg font-semibold text-slate-800">Nurtur Stack</h1>
         </div>
         
         <div className="flex items-center space-x-2">
