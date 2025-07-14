@@ -4,6 +4,8 @@ import {
   type ProtocolItem, type InsertProtocolItem, type Task, type InsertTask,
   type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -43,267 +45,180 @@ export interface IStorage {
   updateIntegration(id: number, integration: Partial<Integration>): Promise<Integration>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User> = new Map();
-  private protocols: Map<number, Protocol> = new Map();
-  private protocolItems: Map<number, ProtocolItem> = new Map();
-  private tasks: Map<number, Task> = new Map();
-  private healthMetrics: Map<number, HealthMetric> = new Map();
-  private integrations: Map<number, Integration> = new Map();
-  
-  private currentUserId = 1;
-  private currentProtocolId = 1;
-  private currentProtocolItemId = 1;
-  private currentTaskId = 1;
-  private currentHealthMetricId = 1;
-  private currentIntegrationId = 1;
-
+export class DatabaseStorage implements IStorage {
   constructor() {
-    // Initialize with default user
-    this.users.set(1, {
-      id: 1,
-      username: "alex",
-      email: "alex@example.com",
-      name: "Alex",
-      avatar: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100",
-      streak: 7,
-      totalCompliance: 92,
-      createdAt: new Date(),
-    });
+    // Initialize default user if not exists
+    this.initializeDefaultUser();
+  }
+
+  private async initializeDefaultUser() {
+    try {
+      const existingUser = await this.getUser(1);
+      if (!existingUser) {
+        await db.insert(users).values({
+          id: 1,
+          username: "alex",
+          email: "alex@example.com",
+          name: "Alex",
+          avatar: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100",
+          streak: 7,
+          totalCompliance: 92,
+        });
+      }
+    } catch (error) {
+      console.log("Default user initialization handled");
+    }
   }
 
   // Users
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const user: User = {
-      ...insertUser,
-      id: this.currentUserId++,
-      avatar: insertUser.avatar || null,
-      streak: 0,
-      totalCompliance: 0,
-      createdAt: new Date(),
-    };
-    this.users.set(user.id, user);
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
   async updateUser(id: number, updates: Partial<User>): Promise<User> {
-    const user = this.users.get(id);
+    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
     if (!user) throw new Error("User not found");
-    
-    const updatedUser = { ...user, ...updates };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    return user;
   }
 
   // Protocols
   async getProtocols(userId: number): Promise<Protocol[]> {
-    return Array.from(this.protocols.values()).filter(p => p.userId === userId);
+    return await db.select().from(protocols).where(eq(protocols.userId, userId));
   }
 
   async getProtocol(id: number): Promise<Protocol | undefined> {
-    return this.protocols.get(id);
+    const [protocol] = await db.select().from(protocols).where(eq(protocols.id, id));
+    return protocol || undefined;
   }
 
   async createProtocol(insertProtocol: InsertProtocol): Promise<Protocol> {
-    const protocol: Protocol = {
-      ...insertProtocol,
-      id: this.currentProtocolId++,
-      color: insertProtocol.color || "#14B8A6",
-      description: insertProtocol.description || null,
-      isActive: insertProtocol.isActive ?? true,
-      goals: insertProtocol.goals || [],
-      createdAt: new Date(),
-    };
-    this.protocols.set(protocol.id, protocol);
+    const [protocol] = await db.insert(protocols).values(insertProtocol).returning();
     return protocol;
   }
 
   async updateProtocol(id: number, updates: Partial<Protocol>): Promise<Protocol> {
-    const protocol = this.protocols.get(id);
+    const [protocol] = await db.update(protocols).set(updates).where(eq(protocols.id, id)).returning();
     if (!protocol) throw new Error("Protocol not found");
-    
-    const updatedProtocol = { ...protocol, ...updates };
-    this.protocols.set(id, updatedProtocol);
-    return updatedProtocol;
+    return protocol;
   }
 
   async deleteProtocol(id: number): Promise<void> {
-    this.protocols.delete(id);
-    // Also delete related items and tasks
-    Array.from(this.protocolItems.keys()).forEach(key => {
-      const item = this.protocolItems.get(key);
-      if (item?.protocolId === id) {
-        this.protocolItems.delete(key);
-      }
-    });
-    Array.from(this.tasks.keys()).forEach(key => {
-      const task = this.tasks.get(key);
-      if (task?.protocolId === id) {
-        this.tasks.delete(key);
-      }
-    });
+    await db.delete(protocols).where(eq(protocols.id, id));
   }
 
   // Protocol Items
   async getProtocolItems(protocolId: number): Promise<ProtocolItem[]> {
-    return Array.from(this.protocolItems.values())
-      .filter(item => item.protocolId === protocolId)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    return await db.select().from(protocolItems).where(eq(protocolItems.protocolId, protocolId));
   }
 
   async createProtocolItem(insertItem: InsertProtocolItem): Promise<ProtocolItem> {
-    const item: ProtocolItem = {
-      ...insertItem,
-      id: this.currentProtocolItemId++,
-      dosageAmount: insertItem.dosageAmount || null,
-      dosageUnit: insertItem.dosageUnit || null,
-      startTime: insertItem.startTime || null,
-      endTime: insertItem.endTime || null,
-      fastingType: insertItem.fastingType || null,
-      sets: insertItem.sets || null,
-      reps: insertItem.reps || null,
-      duration: insertItem.duration || null,
-      restTime: insertItem.restTime || null,
-      weight: insertItem.weight || null,
-      timing: insertItem.timing || null,
-      frequency: insertItem.frequency || "daily",
-      instructions: insertItem.instructions || null,
-      order: insertItem.order || 0,
-    };
-    this.protocolItems.set(item.id, item);
+    const [item] = await db.insert(protocolItems).values(insertItem).returning();
     return item;
   }
 
   async updateProtocolItem(id: number, updates: Partial<ProtocolItem>): Promise<ProtocolItem> {
-    const item = this.protocolItems.get(id);
+    const [item] = await db.update(protocolItems).set(updates).where(eq(protocolItems.id, id)).returning();
     if (!item) throw new Error("Protocol item not found");
-    
-    const updatedItem = { ...item, ...updates };
-    this.protocolItems.set(id, updatedItem);
-    return updatedItem;
+    return item;
   }
 
   async deleteProtocolItem(id: number): Promise<void> {
-    this.protocolItems.delete(id);
-    // Also delete related tasks
-    Array.from(this.tasks.keys()).forEach(key => {
-      const task = this.tasks.get(key);
-      if (task?.protocolItemId === id) {
-        this.tasks.delete(key);
-      }
-    });
+    await db.delete(protocolItems).where(eq(protocolItems.id, id));
   }
 
   // Tasks
   async getTasks(userId: number, date?: string): Promise<Task[]> {
-    const tasks = Array.from(this.tasks.values()).filter(task => task.userId === userId);
-    return date ? tasks.filter(task => task.date === date) : tasks;
+    if (date) {
+      return await db.select().from(tasks).where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.date, date)
+        )
+      );
+    }
+    return await db.select().from(tasks).where(eq(tasks.userId, userId));
   }
 
   async getTask(id: number): Promise<Task | undefined> {
-    return this.tasks.get(id);
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task || undefined;
   }
 
   async createTask(insertTask: InsertTask): Promise<Task> {
-    const task: Task = {
-      ...insertTask,
-      id: this.currentTaskId++,
-      completed: insertTask.completed || false,
-      notes: insertTask.notes || null,
-      completedAt: null,
-    };
-    this.tasks.set(task.id, task);
+    const [task] = await db.insert(tasks).values(insertTask).returning();
     return task;
   }
 
   async updateTask(id: number, updates: Partial<Task>): Promise<Task> {
-    const task = this.tasks.get(id);
+    const [task] = await db.update(tasks).set(updates).where(eq(tasks.id, id)).returning();
     if (!task) throw new Error("Task not found");
-    
-    const updatedTask = { 
-      ...task, 
-      ...updates,
-      completedAt: updates.completed ? new Date() : null
-    };
-    this.tasks.set(id, updatedTask);
-    return updatedTask;
+    return task;
   }
 
   async getTasksForDateRange(userId: number, startDate: string, endDate: string): Promise<Task[]> {
-    return Array.from(this.tasks.values()).filter(task => 
-      task.userId === userId && 
-      task.date >= startDate && 
-      task.date <= endDate
+    return await db.select().from(tasks).where(
+      and(
+        eq(tasks.userId, userId),
+        gte(tasks.date, startDate),
+        lte(tasks.date, endDate)
+      )
     );
   }
 
   // Health Metrics
   async getHealthMetrics(userId: number, date?: string): Promise<HealthMetric[]> {
-    const metrics = Array.from(this.healthMetrics.values()).filter(m => m.userId === userId);
-    return date ? metrics.filter(m => m.date === date) : metrics;
+    if (date) {
+      return await db.select().from(healthMetrics).where(
+        and(
+          eq(healthMetrics.userId, userId),
+          eq(healthMetrics.date, date)
+        )
+      );
+    }
+    return await db.select().from(healthMetrics).where(eq(healthMetrics.userId, userId));
   }
 
   async createHealthMetric(insertMetric: InsertHealthMetric): Promise<HealthMetric> {
-    const metric: HealthMetric = {
-      ...insertMetric,
-      id: this.currentHealthMetricId++,
-      sleepHours: insertMetric.sleepHours || null,
-      mood: insertMetric.mood || null,
-      energy: insertMetric.energy || null,
-      stress: insertMetric.stress || null,
-      weight: insertMetric.weight || null,
-      heartRate: insertMetric.heartRate || null,
-      steps: insertMetric.steps || null,
-      source: insertMetric.source || null,
-      rawData: insertMetric.rawData || null,
-    };
-    this.healthMetrics.set(metric.id, metric);
+    const [metric] = await db.insert(healthMetrics).values(insertMetric).returning();
     return metric;
   }
 
   async getHealthMetricsForDateRange(userId: number, startDate: string, endDate: string): Promise<HealthMetric[]> {
-    return Array.from(this.healthMetrics.values()).filter(metric => 
-      metric.userId === userId && 
-      metric.date >= startDate && 
-      metric.date <= endDate
+    return await db.select().from(healthMetrics).where(
+      and(
+        eq(healthMetrics.userId, userId),
+        gte(healthMetrics.date, startDate),
+        lte(healthMetrics.date, endDate)
+      )
     );
   }
 
   // Integrations
   async getIntegrations(userId: number): Promise<Integration[]> {
-    return Array.from(this.integrations.values()).filter(i => i.userId === userId);
+    return await db.select().from(integrations).where(eq(integrations.userId, userId));
   }
 
   async createIntegration(insertIntegration: InsertIntegration): Promise<Integration> {
-    const integration: Integration = {
-      ...insertIntegration,
-      id: this.currentIntegrationId++,
-      isActive: insertIntegration.isActive ?? true,
-      accessToken: insertIntegration.accessToken || null,
-      refreshToken: insertIntegration.refreshToken || null,
-      settings: insertIntegration.settings || null,
-      lastSync: null,
-    };
-    this.integrations.set(integration.id, integration);
+    const [integration] = await db.insert(integrations).values(insertIntegration).returning();
     return integration;
   }
 
   async updateIntegration(id: number, updates: Partial<Integration>): Promise<Integration> {
-    const integration = this.integrations.get(id);
+    const [integration] = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
     if (!integration) throw new Error("Integration not found");
-    
-    const updatedIntegration = { ...integration, ...updates };
-    this.integrations.set(id, updatedIntegration);
-    return updatedIntegration;
+    return integration;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
