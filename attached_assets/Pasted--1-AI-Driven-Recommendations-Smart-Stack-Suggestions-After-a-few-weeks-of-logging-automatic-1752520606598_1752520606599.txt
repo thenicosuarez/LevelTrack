@@ -1,0 +1,133 @@
+
+1. AI-Driven Recommendations
+Smart Stack Suggestions
+
+
+After a few weeks of logging, automatically surface “people like you” protocols or top-rated stacks.
+
+
+Dose Optimization
+
+
+Flag when you might be under- or over-dosing based on goal (e.g. “you haven’t taken curcumin more than 2 days in a row”).
+
+
+Predictive Insights
+
+
+Use your compliance, mood and sleep data to predict which combos will most likely boost energy or recovery.
+
+
+2. E-commerce & Brand Integration
+In-App Supplement Storefront
+
+
+Link each protocol block to product pages or affiliate SKUs for one-click reordering.
+
+
+Subscription Management
+
+
+Let users subscribe to monthly shipments of their active stacks.
+
+
+Promo & Bundles
+
+
+Push targeted promos (“Try our vitamin D + K2 bundle”) based on their logged goals.
+
+
+3. Social / Community Features
+Streaks & Badges
+
+
+Gamify adherence with streak counters, achievement badges (e.g. “14-day compliant”).
+
+
+Community Boards
+
+
+Let users share protocols, success stories, before/after journals.
+
+
+Coach & Friend Sharing
+
+
+Opt-in “share my calendar” link so a coach or accountability partner can view progress.
+
+
+4. More Integrations
+Apple Health & Google Fit
+
+
+Pull in sleep, steps, HR data without extra sign-ups.
+
+
+Calendar Sync
+
+
+Export scheduled blocks into Google/Outlook so your supplement reminders live alongside your meetings.
+
+
+Barcode Scanner
+
+
+Quickly add any supplement by scanning its barcode and auto-populating dosage info.
+
+Supplement Label Scanner
+Instead of just barcodes, let users snap a photo of any supplement package.
+An AI component (e.g. via OpenAI’s vision/OCR API) parses the label—extracting ingredient names, dosages, serving sizes, nutrition facts, etc.—and auto-populates your protocol grid so you never have to key data into a spreadsheet.
+
+
+5. Advanced Scheduling & Reminders
+Time-of-Day Dosing
+
+
+Support multiple daily doses (e.g. “take fish oil at 8 AM & 8 PM”).
+
+
+Custom Push & Email Alerts
+
+
+Reminders per block, with “snooze” or “mark as taken” right from the notification.
+
+
+Missed Dose Recovery
+
+
+If you miss a check-in, auto-suggest a catch-up protocol or skip.
+
+
+6. Data Portability & Privacy
+Export / Backup
+
+
+One-click CSV/JSON export of all logs, journals, and metrics.
+
+
+End-to-End Encryption
+
+
+Give users peace of mind that health data stays private.
+
+
+GDPR & CCPA Compliance
+
+
+Data-deletion requests, consent flows, etc.
+
+
+7. Coach & Enterprise Mode (Future)
+Multi-User Dashboards
+
+
+Enable wellness coaches or small clinics to onboard clients and view aggregate compliance.
+
+
+Client Notes & Annotations
+
+
+Coaches can tag concerns (e.g. “ask about gut cleanse side effects”).
+
+
+

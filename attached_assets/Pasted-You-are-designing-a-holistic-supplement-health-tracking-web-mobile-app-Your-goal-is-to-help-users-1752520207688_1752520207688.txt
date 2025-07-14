@@ -1,0 +1,75 @@
+You are designing a holistic supplement & health-tracking web/mobile app. Your goal is to help users plan, track, and analyze their entire wellness regimen—supplements, fasts, workouts, meals, habits, and subjective journals—via an intuitive drag-and-drop calendar interface.  
+
+**1. User Persona & Problem Statement**  
+- Target users: health-conscious people running multiple supplement protocols (e.g. creatine, lion’s mane, vitamin D), intermittent fasts, workouts, meal plans and habit routines.  
+- Pain points: difficult to see “what I did when,” hard to map supplements to goals, no unified view of protocols + outcomes, manual spreadsheets are clunky.  
+
+**2. Key Features & Screens**  
+1. **Dashboard/Landing Screen**  
+   - Quick summary of today’s scheduled protocols (supplements, fasts, workouts).  
+   - High-level metrics (compliance %, mood score, sleep hours).  
+
+2. **Calendar/Matrix View**  
+   - Columns = dates; rows = user-defined “blocks” (protocols, workouts, meals, fasts, habits).  
+   - Drag-and-drop blocks: e.g. drag a “2-day fast” block onto May 1–2 and auto-populate those cells.  
+   - Inline checkboxes to mark “done” (e.g. tick if you took lion’s mane on a given day).  
+
+3. **Protocol Builder**  
+   - Define new blocks (supplement or activity), with:  
+     - Name (e.g. “Creatine + Pre-workout”)  
+     - Type (supplement, fast, meal, workout, habit)  
+     - Duration (one-off, repeating, multi-day)  
+     - Mapping to Goals (user selects from athleticism, fat-loss, mobility, sleep, mood).  
+
+4. **Meal & Workout Templates**  
+   - Pre-built templates (e.g. 16:8 fast, hypertrophy workout, keto meal plan).  
+   - Users can customize and save.  
+
+5. **Goal Tracking & Analytics**  
+   - Let users tag each block with health goals (VO₂ max, fat %, steps, mobility).  
+   - Display simple charts of compliance vs. goal over time.  
+
+6. **Journal & Feedback**  
+   - Daily “How do you feel?” check-ins (sleep quality, energy, mood).  
+   - Free-text journaling linked to each block or day.  
+
+7. **Supplement Database & Insights**  
+   - Built-in library of supplements/ingredients with descriptions, typical doses, notes.  
+   - Users can link blocks to these entries.  
+
+8. **Settings & Notifications**  
+   - Reminders for scheduled blocks.  
+   - Custom color-coding by block type or goal.  
+
+**3. Data Model**  
+- **User**: id, name, email, timezone  
+- **Block/Protocol**: id, user_id, name, type, duration, repeat_rule, map_goals[]  
+- **Schedule**: block_id, date, completed (bool), journal_entry, mood_score  
+- **Goal**: id, user_id, name  
+- **Supplement**: id, name, category, dosage_info  
+
+**4. Flow & UX**  
+1. **Onboarding**  
+   - Ask about top 3 health goals.  
+   - Offer a few common protocol templates.  
+2. **Main Calendar**  
+   - Default to current week/month.  
+   - Drag “Add Block” icon onto calendar.  
+3. **Block Creation Modal**  
+   - Let users name block, choose type, set dates/repeat, tag goals.  
+4. **Daily Check-in**  
+   - Prompt at end of day: check-off tasks, rate mood, journal.  
+
+**5. Deliverables for No-Code Builder**  
+- Define data collections/tables based on “Data Model.”  
+- Scaffold screens: Dashboard, Calendar, Block Modal, Journal, Settings.  
+- Wire up calendar UI with drag-and-drop.  
+- Basic analytics chart component.  
+- Notification workflow for reminders.
+
+Please produce:  
+1. A list of required data entities (with fields)  
+2. Screen templates (names + key elements)  
+3. High-level user flows (onboarding → daily usage → analytics)  
+4. Any custom UI components (drag-and-drop calendar grid, check-off widgets, chart cards).
+
