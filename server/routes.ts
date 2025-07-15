@@ -373,6 +373,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Label scanning route
+  app.post("/api/scan-label", async (req, res) => {
+    try {
+      // Mock response for now - will implement with OpenAI Vision API
+      const mockResult = {
+        supplementName: "Magnesium Glycinate",
+        brand: "Thorne",
+        dosageAmount: "200",
+        dosageUnit: "mg",
+        servingSize: "2 capsules",
+        ingredients: ["Magnesium Glycinate", "Hypromellose", "Microcrystalline Cellulose"],
+        confidence: 92,
+        suggestions: [
+          "Take with food for better absorption",
+          "Consider timing before bedtime for sleep benefits",
+          "Start with 1 capsule to assess tolerance"
+        ]
+      };
+      
+      // Simulate processing time
+      setTimeout(() => {
+        res.json(mockResult);
+      }, 1000);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to process label scan" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

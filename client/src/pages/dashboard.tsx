@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/date-utils";
 import TaskItem from "@/components/task-item";
 import ProtocolBuilder from "@/components/protocol-builder";
 import VoiceNoteProcessor from "@/components/voice-note-processor";
+import LabelScanner from "@/components/label-scanner";
 import ProgressChart from "@/components/progress-chart";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
+  const [showLabelScanner, setShowLabelScanner] = useState(false);
   const today = formatDate(new Date());
 
   const { data: user } = useQuery<User>({
@@ -93,33 +95,7 @@ export default function Dashboard() {
     },
   });
 
-  const generateTasksMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("/api/tasks/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ date: today }),
-      });
-      return response;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
-      toast({
-        title: "Success",
-        description: "Tasks generated successfully",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to generate tasks",
-        variant: "destructive",
-      });
-    },
-  });
+
 
   const handleTaskToggle = (taskId: number, completed: boolean) => {
     toggleTaskMutation.mutate({ taskId, completed });
@@ -200,27 +176,46 @@ export default function Dashboard() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <p>No tasks scheduled for today</p>
-                {activeProtocols.length > 0 ? (
-                  <Button 
-                    variant="outline" 
-                    className="mt-2"
-                    onClick={() => generateTasksMutation.mutate()}
-                    disabled={generateTasksMutation.isPending}
-                  >
-                    {generateTasksMutation.isPending ? "Generating..." : "Generate Tasks"}
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="outline" 
-                    className="mt-2"
-                    onClick={() => setShowProtocolBuilder(true)}
-                  >
-                    Create Your First Protocol
-                  </Button>
-                )}
+                <Button 
+                  variant="outline" 
+                  className="mt-2"
+                  onClick={() => setShowProtocolBuilder(true)}
+                >
+                  Create Your First Protocol
+                </Button>
               </div>
             )}
           </div>
+
+          {/* Active Protocols within Today's Protocol */}
+          {activeProtocols.length > 0 && (
+            <div className="mt-6 pt-4 border-t">
+              <h4 className="font-medium text-slate-700 mb-3">Active Protocols</h4>
+              <div className="space-y-2">
+                {activeProtocols.map((protocol) => (
+                  <div key={protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
+                        <div className="w-4 h-4 bg-white rounded-sm opacity-90" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">{protocol.name}</div>
+                        <div className="text-xs text-gray-600">
+                          {protocol.category} • Active
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-primary">
+                        {Math.floor(Math.random() * 20) + 80}%
+                      </div>
+                      <div className="text-xs text-gray-600">Compliance</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -228,7 +223,7 @@ export default function Dashboard() {
       <Card>
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Button 
               variant="outline" 
               className="flex items-center space-x-2 p-3 bg-primary/10 text-primary"
@@ -248,64 +243,16 @@ export default function Dashboard() {
             <Button 
               variant="outline" 
               className="flex items-center space-x-2 p-3 bg-accent/10 text-accent"
-              onClick={() => toast({ title: "Coming Soon", description: "Barcode scanning feature" })}
+              onClick={() => setShowLabelScanner(true)}
             >
               <Camera size={16} />
               <span>Scan Label</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="flex items-center space-x-2 p-3 bg-success/10 text-success"
-              onClick={() => setLocation("/analytics")}
-            >
-              <TrendingUp size={16} />
-              <span>Analytics</span>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Active Protocols Overview */}
-      {activeProtocols.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800">Active Protocols</h3>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setLocation("/protocols")}
-              >
-                View All <ArrowRight size={16} className="ml-1" />
-              </Button>
-            </div>
-            
-            <div className="space-y-3">
-              {activeProtocols.slice(0, 2).map((protocol) => (
-                <div key={protocol.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 gradient-primary rounded-lg flex items-center justify-center">
-                      <div className="w-6 h-6 bg-white rounded-sm opacity-90" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-slate-800">{protocol.name}</div>
-                      <div className="text-xs text-gray-600">
-                        {protocol.category} • Active
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-primary">
-                      {Math.floor(Math.random() * 20) + 80}%
-                    </div>
-                    <div className="text-xs text-gray-600">Compliance</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       {/* Voice Note Processor */}
       <VoiceNoteProcessor 
@@ -314,6 +261,17 @@ export default function Dashboard() {
           queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
         }}
       />
+
+      {/* Label Scanner */}
+      {showLabelScanner && (
+        <LabelScanner 
+          onProtocolCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+            setShowLabelScanner(false);
+          }}
+        />
+      )}
 
       {/* Weekly Progress Chart */}
       {dashboardData?.weeklyData && (
