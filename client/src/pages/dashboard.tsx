@@ -86,6 +86,28 @@ export default function Dashboard() {
     },
   });
 
+  const generateTasksMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tasks/generate", { date: today });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
+      toast({
+        title: "Success",
+        description: "Tasks generated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to generate tasks",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleTaskToggle = (taskId: number, completed: boolean) => {
     toggleTaskMutation.mutate({ taskId, completed });
   };
@@ -165,13 +187,24 @@ export default function Dashboard() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <p>No tasks scheduled for today</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => setShowProtocolBuilder(true)}
-                >
-                  Create Your First Protocol
-                </Button>
+                {activeProtocols.length > 0 ? (
+                  <Button 
+                    variant="outline" 
+                    className="mt-2"
+                    onClick={() => generateTasksMutation.mutate()}
+                    disabled={generateTasksMutation.isPending}
+                  >
+                    {generateTasksMutation.isPending ? "Generating..." : "Generate Tasks"}
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="mt-2"
+                    onClick={() => setShowProtocolBuilder(true)}
+                  >
+                    Create Your First Protocol
+                  </Button>
+                )}
               </div>
             )}
           </div>

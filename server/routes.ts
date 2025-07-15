@@ -136,6 +136,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/tasks/generate", async (req, res) => {
+    try {
+      const { date } = req.body;
+      const targetDate = date || new Date().toISOString().split('T')[0];
+      
+      // Get active protocols for the user
+      const protocols = await storage.getProtocols(currentUserId);
+      const activeProtocols = protocols.filter(p => p.isActive);
+      
+      // Generate tasks for each protocol
+      const generatedTasks = [];
+      for (const protocol of activeProtocols) {
+        const items = await storage.getProtocolItems(protocol.id);
+        
+        for (const item of items) {
+          // Check if task already exists for this date
+          const existingTasks = await storage.getTasks(currentUserId, targetDate);
+          const taskExists = existingTasks.some(t => 
+            t.protocolId === protocol.id && 
+            t.protocolItemId === item.id && 
+            t.date === targetDate
+          );
+          
+          if (!taskExists) {
+            const task = await storage.createTask({
+              userId: currentUserId,
+              protocolId: protocol.id,
+              protocolItemId: item.id,
+              date: targetDate,
+              completed: false,
+              notes: null,
+            });
+            generatedTasks.push(task);
+          }
+        }
+      }
+      
+      res.json({ 
+        message: `Generated ${generatedTasks.length} tasks for ${targetDate}`,
+        tasks: generatedTasks
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate tasks" });
+    }
+  });
+
   app.post("/api/tasks", async (req, res) => {
     try {
       const validatedData = insertTaskSchema.parse({

@@ -198,10 +198,10 @@ export default function Protocols() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        {React.createElement(
-                          categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield,
-                          { size: 20, className: "text-primary" }
-                        )}
+                        {(() => {
+                          const Icon = categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield;
+                          return <Icon size={20} className="text-primary" />;
+                        })()}
                       </div>
                       <div>
                         <h3 className="font-semibold text-slate-800">{protocol.name}</h3>
