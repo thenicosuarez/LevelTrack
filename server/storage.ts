@@ -1,8 +1,9 @@
 import { 
-  users, protocols, protocolItems, tasks, healthMetrics, integrations,
+  users, protocols, protocolItems, tasks, healthMetrics, integrations, voiceNotes,
   type User, type InsertUser, type Protocol, type InsertProtocol,
   type ProtocolItem, type InsertProtocolItem, type Task, type InsertTask,
-  type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration
+  type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration,
+  type VoiceNote, type InsertVoiceNote
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte } from "drizzle-orm";
@@ -43,6 +44,12 @@ export interface IStorage {
   getIntegrations(userId: number): Promise<Integration[]>;
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: number, integration: Partial<Integration>): Promise<Integration>;
+
+  // Voice Notes
+  getVoiceNotes(userId: number): Promise<VoiceNote[]>;
+  createVoiceNote(voiceNote: InsertVoiceNote): Promise<VoiceNote>;
+  updateVoiceNote(id: number, voiceNote: Partial<VoiceNote>): Promise<VoiceNote>;
+  getVoiceNote(id: number): Promise<VoiceNote | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -218,6 +225,27 @@ export class DatabaseStorage implements IStorage {
     const [integration] = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
     if (!integration) throw new Error("Integration not found");
     return integration;
+  }
+
+  // Voice Notes
+  async getVoiceNotes(userId: number): Promise<VoiceNote[]> {
+    return await db.select().from(voiceNotes).where(eq(voiceNotes.userId, userId));
+  }
+
+  async createVoiceNote(insertVoiceNote: InsertVoiceNote): Promise<VoiceNote> {
+    const [voiceNote] = await db.insert(voiceNotes).values(insertVoiceNote).returning();
+    return voiceNote;
+  }
+
+  async updateVoiceNote(id: number, updates: Partial<VoiceNote>): Promise<VoiceNote> {
+    const [voiceNote] = await db.update(voiceNotes).set(updates).where(eq(voiceNotes.id, id)).returning();
+    if (!voiceNote) throw new Error("Voice note not found");
+    return voiceNote;
+  }
+
+  async getVoiceNote(id: number): Promise<VoiceNote | undefined> {
+    const [voiceNote] = await db.select().from(voiceNotes).where(eq(voiceNotes.id, id));
+    return voiceNote || undefined;
   }
 }
 

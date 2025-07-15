@@ -39,9 +39,19 @@ const goals = [
 interface ProtocolItemForm {
   name: string;
   
-  // Supplement/Nutrition fields
+  // Enhanced supplement/nutrition fields
   dosageAmount: string;
   dosageUnit: string;
+  formFactor: string;
+  
+  // Cycling fields
+  cyclingType: string;
+  onCycleDays: string;
+  offCycleDays: string;
+  currentCyclePhase: string;
+  cycleStartDate: string;
+  cycleEndDate: string;
+  trackingKpis: string[];
   
   // Fasting fields
   startTime: string;
@@ -73,6 +83,14 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
     name: "",
     dosageAmount: "",
     dosageUnit: "mg",
+    formFactor: "capsule",
+    cyclingType: "continuous",
+    onCycleDays: "",
+    offCycleDays: "",
+    currentCyclePhase: "on-cycle",
+    cycleStartDate: "",
+    cycleEndDate: "",
+    trackingKpis: [],
     startTime: "08:00",
     endTime: "",
     fastingType: "goal",
@@ -467,6 +485,102 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
                         </div>
                       )}
                     </div>
+
+                    {/* Form Factor for Supplements */}
+                    {selectedCategory === "supplements" && (
+                      <div>
+                        <Label htmlFor={`item-form-factor-${index}`} className="text-xs">Form Factor</Label>
+                        <Select 
+                          value={item.formFactor} 
+                          onValueChange={(value) => updateProtocolItem(index, "formFactor", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="capsule">Capsule</SelectItem>
+                            <SelectItem value="tablet">Tablet</SelectItem>
+                            <SelectItem value="powder">Powder</SelectItem>
+                            <SelectItem value="liquid">Liquid</SelectItem>
+                            <SelectItem value="dropper">Dropper</SelectItem>
+                            <SelectItem value="sublingual">Sublingual</SelectItem>
+                            <SelectItem value="injectable">Injectable</SelectItem>
+                            <SelectItem value="topical">Topical</SelectItem>
+                            <SelectItem value="gummy">Gummy</SelectItem>
+                            <SelectItem value="spray">Spray</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Cycling Options for Supplements */}
+                    {selectedCategory === "supplements" && (
+                      <div className="space-y-3">
+                        <Label className="text-xs font-medium">Cycling Protocol</Label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label htmlFor={`item-cycling-type-${index}`} className="text-xs">Type</Label>
+                            <Select 
+                              value={item.cyclingType} 
+                              onValueChange={(value) => updateProtocolItem(index, "cyclingType", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="continuous">Continuous</SelectItem>
+                                <SelectItem value="standard">Standard (4wk on/2wk off)</SelectItem>
+                                <SelectItem value="micro">Micro (5d on/2d off)</SelectItem>
+                                <SelectItem value="extended">Extended (8wk on/4wk off)</SelectItem>
+                                <SelectItem value="intensive">Intensive (12wk on/12wk off)</SelectItem>
+                                <SelectItem value="custom">Custom</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor={`item-cycle-phase-${index}`} className="text-xs">Current Phase</Label>
+                            <Select 
+                              value={item.currentCyclePhase} 
+                              onValueChange={(value) => updateProtocolItem(index, "currentCyclePhase", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="on-cycle">On-Cycle</SelectItem>
+                                <SelectItem value="wash-out">Wash-Out</SelectItem>
+                                <SelectItem value="off-cycle">Off-Cycle</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        
+                        {item.cyclingType === "custom" && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label htmlFor={`item-on-cycle-days-${index}`} className="text-xs">On-Cycle Days</Label>
+                              <Input
+                                id={`item-on-cycle-days-${index}`}
+                                placeholder="28"
+                                type="number"
+                                value={item.onCycleDays}
+                                onChange={(e) => updateProtocolItem(index, "onCycleDays", e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`item-off-cycle-days-${index}`} className="text-xs">Off-Cycle Days</Label>
+                              <Input
+                                id={`item-off-cycle-days-${index}`}
+                                placeholder="14"
+                                type="number"
+                                value={item.offCycleDays}
+                                onChange={(e) => updateProtocolItem(index, "offCycleDays", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {selectedCategory === "exercise" && (
                       <div className="grid grid-cols-3 gap-3">

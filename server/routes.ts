@@ -1,9 +1,10 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { processVoiceNoteAsync } from "./ai-processor";
 import { 
   insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
-  insertHealthMetricSchema, insertIntegrationSchema 
+  insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -329,6 +330,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch dashboard analytics" });
+    }
+  });
+
+  // Voice Note routes
+  app.get("/api/voice-notes", async (req, res) => {
+    try {
+      const voiceNotes = await storage.getVoiceNotes(currentUserId);
+      res.json(voiceNotes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch voice notes" });
+    }
+  });
+
+  app.get("/api/voice-notes/:id", async (req, res) => {
+    try {
+      const voiceNote = await storage.getVoiceNote(parseInt(req.params.id));
+      if (!voiceNote) {
+        return res.status(404).json({ error: "Voice note not found" });
+      }
+      res.json(voiceNote);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch voice note" });
+    }
+  });
+
+  app.post("/api/voice-notes", async (req, res) => {
+    try {
+      const validatedData = insertVoiceNoteSchema.parse({
+        ...req.body,
+        userId: currentUserId,
+      });
+      
+      const voiceNote = await storage.createVoiceNote(validatedData);
+      
+      // Process the voice note asynchronously
+      processVoiceNoteAsync(voiceNote.id, req.body.audioData);
+      
+      res.json(voiceNote);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid voice note data" });
     }
   });
 

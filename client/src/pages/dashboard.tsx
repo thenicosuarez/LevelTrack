@@ -8,6 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
 import TaskItem from "@/components/task-item";
 import ProtocolBuilder from "@/components/protocol-builder";
+import VoiceNoteProcessor from "@/components/voice-note-processor";
 import ProgressChart from "@/components/progress-chart";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -66,8 +67,14 @@ export default function Dashboard() {
 
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { completed });
-      return response.json();
+      const response = await apiRequest(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ completed }),
+      });
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
@@ -88,8 +95,14 @@ export default function Dashboard() {
 
   const generateTasksMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/tasks/generate", { date: today });
-      return response.json();
+      const response = await apiRequest("/api/tasks/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ date: today }),
+      });
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
@@ -293,6 +306,14 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Voice Note Processor */}
+      <VoiceNoteProcessor 
+        onProtocolCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+        }}
+      />
 
       {/* Weekly Progress Chart */}
       {dashboardData?.weeklyData && (

@@ -1,0 +1,74 @@
+Here’s a high-level, corporate-style playbook for “supplement cycling” that you can adapt across any protocol:
+
+⸻
+
+1. What Is Supplement Cycling?
+
+Think of cycling as a strategic on/off deployment of a supplement (or stack) to:
+	•	Prevent tolerance (maintain ROI on efficacy)
+	•	Mitigate side effects (protect system integrity)
+	•	Optimize long-term safety (limit down-regulation of receptors)
+
+⸻
+
+2. Core Framework for Your Cycle Protocol
+
+Phase	Objective	Key Actions
+On-Cycle	Drive intended biological response	• Set start/end dates in your calendar (e.g. Apr 1–Apr 28)
+• Log dose, timing & subjective KPIs (energy, mood, sleep) daily		
+• Monitor any lab markers if relevant (e.g. free T, cortisol, liver enzymes)		
+Wash-Out	Clear residual activity; reset receptor sensitivity	• Taper last few days if needed
+• Take only baseline essentials (multivitamin, fish oil)		
+• Continue KPI logging for “return-to-baseline” comparison		
+Off-Cycle	Recovery & re-sensitization	• No active compound
+• Focus on support nutrients (B-vitamins, adaptogenic herbs)		
+• Review KPI trends vs. on-cycle performance		
+
+
+⸻
+
+3. Tracking & Compliance Infrastructure
+	1.	Digital Dashboard
+	•	Use a spreadsheet or app (Notion / Airtable / Cronometer) with columns for: date, supplement, dose, time, KPI scores (1–5), side-effect notes.
+	2.	Automated Reminders
+	•	Calendar invites or a habit-tracker app (e.g., Habitica, Streaks) that notifies you at each dosing window.
+	3.	Physical SOP
+	•	Pre-package weekly doses in a pill organizer
+	•	Label compartments “On-Cycle 1,” “On-Cycle 2,”… so there’s zero ambiguity
+	4.	Weekly Tactical Reviews
+	•	Every Friday, pull your KPI data, compare “On vs. Off,” adjust next cycle’s length or dose as needed
+
+⸻
+
+4. Scheduling & Scalability
+	•	Standard “Corporate” Cycle Templates
+	•	4 weeks on / 2 weeks off – great for mild adaptogens & nootropics
+	•	8 weeks on / 4 weeks off – common for hormonal modulators (SARMs, plant-based phytoandrogens)
+	•	12 weeks on / 12 weeks off – typical for prohormone or intensive peptide protocols
+	•	Micro-Cycling
+	•	5 days on / 2 days off – stimulants like caffeine or tyrosine to avoid adrenal burnout
+	•	Continuous Use (No Cycle)
+	•	Supplements with low tolerance risk: creatine, fish oil, multivitamins (but still monitor labs annually)
+
+⸻
+
+5. Examples of Known Protocols
+
+Supplement Category	On-Cycle	Off-Cycle	Rationale
+Caffeine	5 days on / 2 days off	N/A	Avoid up-regulation of adenosine R
+Ashwagandha	6 weeks on / 2 weeks off	2 weeks of B-vitamins	Prevent HPA axis desensitization
+Racetam nootropics	8 weeks on / 4 weeks off	4 weeks of choline	Maintain synaptic receptor density
+SARMs (e.g. Ostarine)	8 weeks on / 4 weeks off	PCT (clomid/nolva) if needed	Preserve HPT axis integrity
+Peptides (e.g. BPC-157)	4 weeks on / 4 weeks off	Support supplements only	Allow receptor recycling
+
+
+⸻
+
+🔑 Practical Tips for Enterprise-Grade Compliance
+	•	Integrate into Your Weekly Ops: Treat your cycle like a recurring team meeting—non-negotiable.
+	•	Dashboard Metrics: Define 2–3 “health KPIs” (e.g., sleep quality, workout recovery, libido) and track them religiously.
+	•	Continuous Improvement: After each off-cycle, run a “retrospective” to optimize next cycle’s duration and dose.
+
+⸻
+
+Bottom line: Build your cycle like a quarterly business plan—set clear objectives, track the right metrics, review performance, rinse and repeat. That forward-thinking discipline will maximize efficacy, safety, and compliance over the long haul.

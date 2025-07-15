@@ -30,9 +30,18 @@ export const protocolItems = pgTable("protocol_items", {
   protocolId: integer("protocol_id").references(() => protocols.id).notNull(),
   name: text("name").notNull(),
   
-  // Supplement/Nutrition fields
+  // Enhanced supplement/nutrition fields
   dosageAmount: integer("dosage_amount"), // numerical value like 500, 1000, 2
   dosageUnit: text("dosage_unit"), // mg, g, oz, ml, pills, drops, etc.
+  formFactor: text("form_factor"), // capsule, powder, injectable, sublingual, dropper, tablet, liquid, etc.
+  
+  // Cycling information
+  cyclingType: text("cycling_type"), // continuous, standard, micro, custom
+  onCycleDays: integer("on_cycle_days"), // days in on-cycle phase
+  offCycleDays: integer("off_cycle_days"), // days in off-cycle phase
+  currentCyclePhase: text("current_cycle_phase"), // on-cycle, wash-out, off-cycle
+  cycleStartDate: text("cycle_start_date"), // when current cycle started
+  cycleEndDate: text("cycle_end_date"), // when current cycle ends
   
   // Fasting fields
   startTime: text("start_time"), // "08:00"
@@ -51,6 +60,9 @@ export const protocolItems = pgTable("protocol_items", {
   frequency: text("frequency").default("daily"), // daily, weekly, as_needed
   instructions: text("instructions"),
   order: integer("order").default(0),
+  
+  // KPI tracking for cycling
+  trackingKpis: text("tracking_kpis").array(), // energy, mood, sleep, recovery, etc.
 });
 
 export const tasks = pgTable("tasks", {
@@ -90,6 +102,18 @@ export const integrations = pgTable("integrations", {
   settings: jsonb("settings"),
 });
 
+export const voiceNotes = pgTable("voice_notes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  audioUrl: text("audio_url"), // URL to stored audio file
+  transcription: text("transcription"), // AI transcribed text
+  aiAnalysis: jsonb("ai_analysis"), // AI analysis and recommendations
+  extractedProtocols: jsonb("extracted_protocols"), // parsed protocol data
+  processingStatus: text("processing_status").default("pending"), // pending, processing, completed, failed
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -119,6 +143,12 @@ export const insertIntegrationSchema = createInsertSchema(integrations).omit({
   lastSync: true,
 });
 
+export const insertVoiceNoteSchema = createInsertSchema(voiceNotes).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -137,3 +167,6 @@ export type InsertHealthMetric = z.infer<typeof insertHealthMetricSchema>;
 
 export type Integration = typeof integrations.$inferSelect;
 export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
+
+export type VoiceNote = typeof voiceNotes.$inferSelect;
+export type InsertVoiceNote = z.infer<typeof insertVoiceNoteSchema>;
