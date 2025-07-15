@@ -379,7 +379,9 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
                       <SelectContent>
                         <SelectItem value="daily">Daily</SelectItem>
                         <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="as_needed">As Needed</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="one_time">One Time (1x)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -659,7 +661,9 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
                           <SelectContent>
                             <SelectItem value="daily">Daily</SelectItem>
                             <SelectItem value="weekly">Weekly</SelectItem>
-                            <SelectItem value="as_needed">As Needed</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="quarterly">Quarterly</SelectItem>
+                            <SelectItem value="one_time">One Time (1x)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

@@ -195,61 +195,46 @@ export default function Protocols() {
           <Card>
             <CardContent className="p-0">
               {/* Header Row */}
-              <div className="grid grid-cols-6 gap-4 p-4 bg-gray-50 text-sm font-medium text-gray-600 border-b">
+              <div className="grid grid-cols-5 gap-4 p-3 bg-gray-50 text-xs font-medium text-gray-600 border-b">
                 <div className="col-span-2">Protocol</div>
                 <div className="text-center">L30D</div>
                 <div className="text-center">L90D</div>
                 <div className="text-center">L365D</div>
-                <div className="text-center">Actions</div>
               </div>
               
               {/* Data Rows */}
               {filteredProtocols.map((protocol, index) => (
-                <div key={protocol.id} className={`grid grid-cols-6 gap-4 p-4 items-center hover:bg-gray-50 ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}>
+                <div 
+                  key={protocol.id} 
+                  className={`grid grid-cols-5 gap-4 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}
+                  onClick={() => {
+                    // TODO: Open protocol details/edit modal
+                    console.log('Edit protocol:', protocol.id);
+                  }}
+                >
                   <div className="col-span-2 flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                       {(() => {
                         const Icon = categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield;
-                        return <Icon size={16} className="text-primary" />;
+                        return <Icon size={12} className="text-primary" />;
                       })()}
                     </div>
                     <div>
-                      <div className="font-medium text-slate-800">{protocol.name}</div>
-                      <div className="text-sm text-gray-600">{protocol.description}</div>
+                      <div className="text-sm font-medium text-slate-800">{protocol.name}</div>
+                      <div className="text-xs text-gray-600">{protocol.description}</div>
                     </div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-primary">97%</div>
+                    <div className="text-sm font-semibold text-primary">97%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-primary">92%</div>
+                    <div className="text-sm font-semibold text-primary">92%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-primary">32%</div>
-                  </div>
-                  
-                  <div className="text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleProtocol(protocol.id, protocol.isActive)}
-                        className="text-xs"
-                      >
-                        {protocol.isActive ? "Pause" : "Resume"}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteProtocol(protocol.id)}
-                        className="text-red-500 hover:text-red-700 text-xs"
-                      >
-                        Delete
-                      </Button>
-                    </div>
+                    <div className="text-sm font-semibold text-primary">32%</div>
                   </div>
                 </div>
               ))}
