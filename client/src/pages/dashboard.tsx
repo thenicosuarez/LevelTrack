@@ -160,32 +160,54 @@ export default function Dashboard() {
             </Badge>
           </div>
           
-          <div className="space-y-3">
-            {todayTasks.length > 0 ? (
-              todayTasks.map((task) => {
+          {todayTasks.length > 0 ? (
+            <div className="space-y-0 border rounded-lg overflow-hidden">
+              {/* Header */}
+              <div className="grid grid-cols-12 gap-2 p-3 bg-gray-50 text-sm font-medium text-gray-600 border-b">
+                <div className="col-span-1"></div>
+                <div className="col-span-3">Item</div>
+                <div className="col-span-2 text-center">Dosage</div>
+                <div className="col-span-6">Description</div>
+              </div>
+              
+              {/* Data Rows */}
+              {todayTasks.map((task, index) => {
                 const item = protocolItems.find(item => item.id === task.protocolItemId);
                 return item ? (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    protocolItem={item}
-                    onToggle={handleTaskToggle}
-                  />
+                  <div key={task.id} className={`grid grid-cols-12 gap-2 p-3 items-center hover:bg-gray-50 ${index !== todayTasks.length - 1 ? 'border-b' : ''}`}>
+                    <div className="col-span-1">
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={(e) => handleTaskToggle(task.id, e.target.checked)}
+                        className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <div className="font-medium text-sm">{item.name}</div>
+                    </div>
+                    <div className="col-span-2 text-center text-sm">
+                      {item.dosageAmount ? `${item.dosageAmount}${item.dosageUnit}` : 'Daily'}
+                    </div>
+                    <div className="col-span-6 text-sm text-gray-600">
+                      {item.instructions || 'Daily routine tracking'}
+                    </div>
+                  </div>
                 ) : null;
-              })
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p>No tasks scheduled for today</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => setShowProtocolBuilder(true)}
-                >
-                  Create Your First Protocol
-                </Button>
-              </div>
-            )}
-          </div>
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No tasks scheduled for today</p>
+              <Button 
+                variant="outline" 
+                className="mt-2"
+                onClick={() => setShowProtocolBuilder(true)}
+              >
+                Create Your First Protocol
+              </Button>
+            </div>
+          )}
 
           {/* Active Protocols within Today's Protocol */}
           {activeProtocols.length > 0 && (

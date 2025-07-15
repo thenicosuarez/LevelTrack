@@ -24,6 +24,7 @@ export default function Protocols() {
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30");
 
   const { data: protocols = [], isLoading } = useQuery<Protocol[]>({
     queryKey: ['/api/protocols'],
@@ -177,7 +178,7 @@ export default function Protocols() {
         <CardContent className="p-6">
           <Button
             variant="ghost"
-            className="w-full h-16 border-none text-gray-600 hover:text-primary"
+            className="w-full h-16 border-none text-gray-600 hover:bg-primary hover:text-orange-500"
             onClick={() => setShowProtocolBuilder(true)}
           >
             <Plus size={24} className="mr-2" />
@@ -191,55 +192,52 @@ export default function Protocols() {
         <h2 className="text-lg font-semibold text-slate-800">Current Protocols</h2>
         
         {filteredProtocols.length > 0 ? (
-          <div className="space-y-4">
-            {filteredProtocols.map((protocol) => (
-              <Card key={protocol.id} className="protocol-card">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        {(() => {
-                          const Icon = categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield;
-                          return <Icon size={20} className="text-primary" />;
-                        })()}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-800">{protocol.name}</h3>
-                        <p className="text-sm text-gray-600">{protocol.description}</p>
-                      </div>
+          <Card>
+            <CardContent className="p-0">
+              {/* Header Row */}
+              <div className="grid grid-cols-6 gap-4 p-4 bg-gray-50 text-sm font-medium text-gray-600 border-b">
+                <div className="col-span-2">Protocol</div>
+                <div className="text-center">L30D</div>
+                <div className="text-center">L90D</div>
+                <div className="text-center">L365D</div>
+                <div className="text-center">Actions</div>
+              </div>
+              
+              {/* Data Rows */}
+              {filteredProtocols.map((protocol, index) => (
+                <div key={protocol.id} className={`grid grid-cols-6 gap-4 p-4 items-center hover:bg-gray-50 ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}>
+                  <div className="col-span-2 flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                      {(() => {
+                        const Icon = categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield;
+                        return <Icon size={16} className="text-primary" />;
+                      })()}
                     </div>
-                    
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-primary">
-                        {Math.floor(Math.random() * 20) + 80}%
-                      </div>
-                      <div className="text-xs text-gray-600">Compliance</div>
+                    <div>
+                      <div className="font-medium text-slate-800">{protocol.name}</div>
+                      <div className="text-sm text-gray-600">{protocol.description}</div>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {protocol.category}
-                      </Badge>
-                      <Badge 
-                        variant={protocol.isActive ? "default" : "secondary"} 
-                        className="text-xs"
-                      >
-                        {protocol.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                      {protocol.goals?.map((goal, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {goal}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center space-x-2">
+                  
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-primary">97%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-primary">92%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-primary">32%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="flex items-center justify-center space-x-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleProtocol(protocol.id, protocol.isActive)}
+                        className="text-xs"
                       >
                         {protocol.isActive ? "Pause" : "Resume"}
                       </Button>
@@ -247,16 +245,16 @@ export default function Protocols() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDeleteProtocol(protocol.id)}
-                        className="text-red-500 hover:text-red-700"
+                        className="text-red-500 hover:text-red-700 text-xs"
                       >
                         Delete
                       </Button>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         ) : (
           <div className="text-center py-12 text-gray-500">
             <Shield size={48} className="mx-auto mb-4 text-gray-300" />
@@ -277,26 +275,56 @@ export default function Protocols() {
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Historical Data</h3>
           <div className="flex items-center space-x-4 mb-4">
-            <Button variant="default" size="sm">30 Days</Button>
-            <Button variant="outline" size="sm">90 Days</Button>
-            <Button variant="outline" size="sm">365 Days</Button>
+            <Button 
+              variant={selectedTimeRange === "30" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSelectedTimeRange("30")}
+            >
+              30 Days
+            </Button>
+            <Button 
+              variant={selectedTimeRange === "90" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSelectedTimeRange("90")}
+            >
+              90 Days
+            </Button>
+            <Button 
+              variant={selectedTimeRange === "365" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSelectedTimeRange("365")}
+            >
+              365 Days
+            </Button>
           </div>
           
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-primary">92%</div>
+              <div className="text-2xl font-bold text-primary">
+                {selectedTimeRange === "30" ? "92%" : selectedTimeRange === "90" ? "87%" : "81%"}
+              </div>
               <div className="text-sm text-gray-600">Supplement Compliance</div>
-              <div className="text-xs text-success">↑ 5%</div>
+              <div className="text-xs text-success">
+                {selectedTimeRange === "30" ? "↑ 5%" : selectedTimeRange === "90" ? "↑ 8%" : "↑ 12%"}
+              </div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-secondary">7.8hrs</div>
+              <div className="text-2xl font-bold text-secondary">
+                {selectedTimeRange === "30" ? "7.8hrs" : selectedTimeRange === "90" ? "7.5hrs" : "7.2hrs"}
+              </div>
               <div className="text-sm text-gray-600">Average Sleep</div>
-              <div className="text-xs text-success">↑ 0.3hrs</div>
+              <div className="text-xs text-success">
+                {selectedTimeRange === "30" ? "↑ 0.3hrs" : selectedTimeRange === "90" ? "↑ 0.5hrs" : "↑ 0.8hrs"}
+              </div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-accent">24</div>
+              <div className="text-2xl font-bold text-accent">
+                {selectedTimeRange === "30" ? "24" : selectedTimeRange === "90" ? "68" : "245"}
+              </div>
               <div className="text-sm text-gray-600">Training Sessions</div>
-              <div className="text-xs text-success">↑ 4</div>
+              <div className="text-xs text-success">
+                {selectedTimeRange === "30" ? "↑ 4" : selectedTimeRange === "90" ? "↑ 12" : "↑ 38"}
+              </div>
             </div>
           </div>
         </CardContent>

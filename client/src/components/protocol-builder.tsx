@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Shield, Clock, Dumbbell, Utensils } from "lucide-react";
+import { Plus, Trash2, Shield, Clock, Dumbbell, Utensils, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { InsertProtocol, InsertProtocolItem } from "@shared/schema";
@@ -263,6 +263,9 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
       <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Protocol</DialogTitle>
+          <DialogDescription>
+            Create a new health protocol with supplements, exercises, fasting, or nutrition tracking.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -425,14 +428,31 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
                            selectedCategory === "nutrition" ? "Food Name" : 
                            selectedCategory === "exercise" ? "Exercise Name" : "Name"}
                         </Label>
-                        <Input
-                          id={`item-name-${index}`}
-                          placeholder={selectedCategory === "supplements" ? "e.g., Omega 3" : 
-                                     selectedCategory === "nutrition" ? "e.g., Oatmeal" : 
-                                     selectedCategory === "exercise" ? "e.g., Push-ups" : "Name"}
-                          value={item.name}
-                          onChange={(e) => updateProtocolItem(index, "name", e.target.value)}
-                        />
+                        <div className="flex space-x-2">
+                          <Input
+                            id={`item-name-${index}`}
+                            placeholder={selectedCategory === "supplements" ? "e.g., Omega 3" : 
+                                       selectedCategory === "nutrition" ? "e.g., Oatmeal" : 
+                                       selectedCategory === "exercise" ? "e.g., Push-ups" : "Name"}
+                            value={item.name}
+                            onChange={(e) => updateProtocolItem(index, "name", e.target.value)}
+                            className="flex-1"
+                          />
+                          {selectedCategory === "supplements" && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="px-2"
+                              onClick={() => {
+                                // This will eventually trigger the camera/label scanner
+                                alert("Camera feature coming soon!");
+                              }}
+                            >
+                              <Camera size={16} />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       
                       {selectedCategory === "exercise" ? (
