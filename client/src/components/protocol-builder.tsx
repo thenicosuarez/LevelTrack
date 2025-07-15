@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Shield, Clock, Dumbbell, Utensils, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { InsertProtocol, InsertProtocolItem } from "@shared/schema";
+import type { InsertProtocol, InsertProtocolItem, Protocol } from "@shared/schema";
 
 interface ProtocolBuilderProps {
   open: boolean;
   onClose: () => void;
+  editingProtocol?: Protocol | null;
 }
 
 const categories = [
@@ -71,7 +72,7 @@ interface ProtocolItemForm {
   instructions: string;
 }
 
-export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps) {
+export default function ProtocolBuilder({ open, onClose, editingProtocol }: ProtocolBuilderProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -107,6 +108,61 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
   const [protocolItems, setProtocolItems] = useState<ProtocolItemForm[]>([
     getDefaultProtocolItem()
   ]);
+
+  // Initialize form with existing protocol data when editing
+  useEffect(() => {
+    if (editingProtocol && open) {
+      setProtocolName(editingProtocol.name);
+      setProtocolDescription(editingProtocol.description || "");
+      setSelectedCategory(editingProtocol.category);
+      setSelectedGoals(editingProtocol.goals || []);
+      
+      // Load protocol items
+      const loadProtocolItems = async () => {
+        try {
+          const response = await fetch(`/api/protocols/${editingProtocol.id}/items`);
+          const items = await response.json();
+          if (items.length > 0) {
+            setProtocolItems(items.map((item: any) => ({
+              name: item.name,
+              dosageAmount: item.dosageAmount?.toString() || "",
+              dosageUnit: item.dosageUnit || "mg",
+              formFactor: item.formFactor || "capsule",
+              cyclingType: item.cyclingType || "continuous",
+              onCycleDays: item.onCycleDays?.toString() || "",
+              offCycleDays: item.offCycleDays?.toString() || "",
+              currentCyclePhase: item.currentCyclePhase || "on-cycle",
+              cycleStartDate: item.cycleStartDate || "",
+              cycleEndDate: item.cycleEndDate || "",
+              trackingKpis: item.trackingKpis || [],
+              startTime: item.startTime || "",
+              endTime: item.endTime || "",
+              fastingType: item.fastingType || "goal",
+              sets: item.sets?.toString() || "",
+              reps: item.reps?.toString() || "",
+              duration: item.duration?.toString() || "",
+              restTime: item.restTime?.toString() || "",
+              weight: item.weight?.toString() || "",
+              timing: item.timing || "",
+              frequency: item.frequency || "daily",
+              instructions: item.instructions || "",
+            })));
+          }
+        } catch (error) {
+          console.error('Error loading protocol items:', error);
+        }
+      };
+      
+      loadProtocolItems();
+    } else if (!editingProtocol && open) {
+      // Reset form for new protocol
+      setProtocolName("");
+      setProtocolDescription("");
+      setSelectedCategory("supplements");
+      setSelectedGoals([]);
+      setProtocolItems([getDefaultProtocolItem()]);
+    }
+  }, [editingProtocol, open]);
 
   const createProtocolMutation = useMutation({
     mutationFn: async (data: InsertProtocol) => {
@@ -262,9 +318,9 @@ export default function ProtocolBuilder({ open, onClose }: ProtocolBuilderProps)
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New Protocol</DialogTitle>
+          <DialogTitle>{editingProtocol ? 'Edit Protocol' : 'New Protocol'}</DialogTitle>
           <DialogDescription>
-            Create a new health protocol with supplements, exercises, fasting, or nutrition tracking.
+            {editingProtocol ? 'Update your existing health protocol settings.' : 'Create a new health protocol with supplements, exercises, fasting, or nutrition tracking.'}
           </DialogDescription>
         </DialogHeader>
 

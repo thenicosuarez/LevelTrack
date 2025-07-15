@@ -22,6 +22,8 @@ export default function Protocols() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
+  const [showProtocolEditor, setShowProtocolEditor] = useState(false);
+  const [selectedProtocol, setSelectedProtocol] = useState<Protocol | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30");
@@ -195,8 +197,9 @@ export default function Protocols() {
           <Card>
             <CardContent className="p-0">
               {/* Header Row */}
-              <div className="grid grid-cols-5 gap-4 p-3 bg-gray-50 text-xs font-medium text-gray-600 border-b">
+              <div className="grid grid-cols-6 gap-3 p-3 bg-gray-50 text-xs font-medium text-gray-600 border-b">
                 <div className="col-span-2">Protocol</div>
+                <div className="text-center">Dosage</div>
                 <div className="text-center">L30D</div>
                 <div className="text-center">L90D</div>
                 <div className="text-center">L365D</div>
@@ -206,10 +209,10 @@ export default function Protocols() {
               {filteredProtocols.map((protocol, index) => (
                 <div 
                   key={protocol.id} 
-                  className={`grid grid-cols-5 gap-4 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}
+                  className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}
                   onClick={() => {
-                    // TODO: Open protocol details/edit modal
-                    console.log('Edit protocol:', protocol.id);
+                    setSelectedProtocol(protocol);
+                    setShowProtocolEditor(true);
                   }}
                 >
                   <div className="col-span-2 flex items-center space-x-3">
@@ -226,15 +229,23 @@ export default function Protocols() {
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-primary">97%</div>
+                    <div className="text-xs text-gray-600">
+                      {protocol.name === 'Zyrtec' ? '10mg' : 
+                       protocol.name === 'Vit D3+K2' ? '5,000 IU' : 
+                       protocol.name === 'Shilajit' ? '200 mg' : 'Daily'}
+                    </div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-primary">92%</div>
+                    <div className="text-xs font-semibold text-primary">97%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-primary">32%</div>
+                    <div className="text-xs font-semibold text-primary">92%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-xs font-semibold text-primary">32%</div>
                   </div>
                 </div>
               ))}
@@ -319,6 +330,18 @@ export default function Protocols() {
         open={showProtocolBuilder} 
         onClose={() => setShowProtocolBuilder(false)} 
       />
+      
+      {/* Protocol Editor Modal */}
+      {selectedProtocol && (
+        <ProtocolBuilder 
+          open={showProtocolEditor} 
+          onClose={() => {
+            setShowProtocolEditor(false);
+            setSelectedProtocol(null);
+          }}
+          editingProtocol={selectedProtocol}
+        />
+      )}
     </div>
   );
 }

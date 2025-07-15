@@ -21,13 +21,13 @@ export default function BottomNav() {
             key={path}
             variant="ghost"
             size="sm"
-            className={`flex flex-col items-center space-y-1 p-2 ${
+            className={`flex flex-col items-center space-y-0.5 px-2 py-1 h-12 ${
               location === path ? "text-primary" : "text-gray-500"
-            }`}
+            } hover:bg-gray-50 rounded-md`}
             onClick={() => setLocation(path)}
           >
-            <Icon size={18} />
-            <span className="text-xs">{label}</span>
+            <Icon size={16} />
+            <span className="text-xs leading-tight">{label}</span>
           </Button>
         ))}
       </div>
