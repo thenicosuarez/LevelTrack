@@ -180,15 +180,15 @@ export default function Calendar() {
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-primary">
-                {Math.floor(Math.random() * 20) + 80}%
+                {tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0}%
               </div>
-              <div className="text-sm text-gray-600">Avg Compliance</div>
+              <div className="text-sm text-gray-600">Today's Compliance</div>
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-secondary">
-                {Math.floor(Math.random() * 10) + 20}
+                {tasks.length}
               </div>
-              <div className="text-sm text-gray-600">Active Days</div>
+              <div className="text-sm text-gray-600">Total Tasks</div>
             </div>
           </div>
         </CardContent>

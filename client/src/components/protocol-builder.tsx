@@ -222,17 +222,40 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
 
   const updateProtocolItemMutation = useMutation({
     mutationFn: async ({ protocolId, items }: { protocolId: number; items: ProtocolItemForm[] }) => {
-      // First, delete existing items
-      await apiRequest("DELETE", `/api/protocols/${protocolId}/items`);
-      
-      // Then create new items
-      const promises = items.map((item, index) => 
-        apiRequest("POST", `/api/protocols/${protocolId}/items`, {
-          ...item,
-          order: index
-        })
-      );
-      return Promise.all(promises);
+      try {
+        // First, delete existing items
+        const deleteResponse = await apiRequest("DELETE", `/api/protocols/${protocolId}/items`);
+        
+        // Then create new items one by one
+        for (const item of items) {
+          const response = await apiRequest("POST", `/api/protocols/${protocolId}/items`, {
+            ...item,
+            order: 0
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to create item: ${item.name} - ${errorText}`);
+          }
+        }
+      } catch (error) {
+        console.error("Error in updateProtocolItemMutation:", error);
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+      toast({
+        title: "Success",
+        description: "Protocol updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      console.error("Error saving protocol:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update protocol",
+        variant: "destructive",
+      });
     },
   });
 

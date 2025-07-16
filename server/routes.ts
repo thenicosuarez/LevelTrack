@@ -128,9 +128,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/protocols/:id/items", async (req, res) => {
     try {
-      await storage.deleteProtocolItems(parseInt(req.params.id));
+      const protocolId = parseInt(req.params.id);
+      await storage.deleteProtocolItems(protocolId);
       res.json({ success: true });
     } catch (error) {
+      console.error("Delete protocol items error:", error);
       res.status(500).json({ error: "Failed to delete protocol items" });
     }
   });
@@ -207,9 +209,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      const task = await storage.updateTask(parseInt(req.params.id), req.body);
+      const taskId = parseInt(req.params.id);
+      const updates = req.body;
+      
+      // Set completedAt if completed is being set to true
+      if (updates.completed === true && !updates.completedAt) {
+        updates.completedAt = new Date();
+      } else if (updates.completed === false) {
+        updates.completedAt = null;
+      }
+      
+      const task = await storage.updateTask(taskId, updates);
       res.json(task);
     } catch (error) {
+      console.error("Task update error:", error);
       res.status(500).json({ error: "Failed to update task" });
     }
   });

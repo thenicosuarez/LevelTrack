@@ -146,7 +146,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProtocolItems(protocolId: number): Promise<void> {
-    await db.delete(protocolItems).where(eq(protocolItems.protocolId, protocolId));
+    try {
+      // First, delete any tasks that reference protocol items from this protocol
+      const itemsToDelete = await db.select().from(protocolItems).where(eq(protocolItems.protocolId, protocolId));
+      
+      for (const item of itemsToDelete) {
+        await db.delete(tasks).where(eq(tasks.protocolItemId, item.id));
+      }
+      
+      // Then delete the protocol items
+      await db.delete(protocolItems).where(eq(protocolItems.protocolId, protocolId));
+    } catch (error) {
+      console.error("Error deleting protocol items:", error);
+      throw error;
+    }
   }
 
   // Tasks
