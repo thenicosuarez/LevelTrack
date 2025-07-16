@@ -50,6 +50,8 @@ export default function Calendar() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/protocols/compliance', 30] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
     },
   });
 

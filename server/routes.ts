@@ -174,7 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(compliancePercentages);
     } catch (error) {
       console.error("Protocol compliance error:", error);
-      res.status(500).json({ error: "Failed to calculate protocol compliance" });
+      res.status(500).json({ error: "Failed to fetch protocol compliance" });
     }
   });
 
