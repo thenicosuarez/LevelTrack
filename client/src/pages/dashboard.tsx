@@ -47,7 +47,10 @@ export default function Dashboard() {
 
   const { data: todayTasks = [] } = useQuery<Task[]>({
     queryKey: ['/api/tasks', { date: today }],
-    queryFn: () => fetch(`/api/tasks?date=${today}`).then(res => res.json()),
+    queryFn: async () => {
+      const response = await fetch(`/api/tasks?date=${today}`);
+      return response.json();
+    },
   });
 
   const { data: protocols = [] } = useQuery<Protocol[]>({

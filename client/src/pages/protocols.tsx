@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import ProtocolBuilder from "@/components/protocol-builder";
 import ProtocolCard from "@/components/protocol-card";
-import type { Protocol } from "@shared/schema";
+import type { Protocol, ProtocolItem } from "@shared/schema";
 
 const categoryIcons = {
   supplements: Shield,
@@ -31,6 +31,32 @@ export default function Protocols() {
   const { data: protocols = [], isLoading } = useQuery<Protocol[]>({
     queryKey: ['/api/protocols'],
   });
+
+  // Get protocol items for dosage display
+  const { data: allProtocolItems = [] } = useQuery<ProtocolItem[]>({
+    queryKey: ['/api/protocol-items'],
+    queryFn: async () => {
+      const allItems = [];
+      for (const protocol of protocols) {
+        const items = await fetch(`/api/protocols/${protocol.id}/items`).then(res => res.json());
+        allItems.push(...items);
+      }
+      return allItems;
+    },
+    enabled: protocols.length > 0,
+  });
+
+  // Helper function to get dosage display from actual database values
+  const getDosageDisplay = (protocol: Protocol) => {
+    const protocolItems = allProtocolItems.filter(item => item.protocolId === protocol.id);
+    if (protocolItems.length === 0) return 'N/A';
+    
+    const firstItem = protocolItems[0];
+    if (firstItem.dosageAmount && firstItem.dosageUnit) {
+      return `${firstItem.dosageAmount.toLocaleString()} ${firstItem.dosageUnit}`;
+    }
+    return 'Daily';
+  };
 
   const deleteProtocolMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -230,9 +256,7 @@ export default function Protocols() {
                   
                   <div className="text-center">
                     <div className="text-xs text-gray-600">
-                      {protocol.name === 'Zyrtec' ? '10 mg' : 
-                       protocol.name === 'Vit D3+K2' ? '5,000 IU' : 
-                       protocol.name === 'Shilajit' ? '200 mg' : 'Daily'}
+                      {getDosageDisplay(protocol)}
                     </div>
                   </div>
                   
