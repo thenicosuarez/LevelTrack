@@ -80,6 +80,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   const [protocolName, setProtocolName] = useState("");
   const [protocolDescription, setProtocolDescription] = useState("");
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const getDefaultProtocolItem = (): ProtocolItemForm => ({
     name: "",
     dosageAmount: "",
@@ -116,6 +117,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       setProtocolDescription(editingProtocol.description || "");
       setSelectedCategory(editingProtocol.category);
       setSelectedGoals(editingProtocol.goals || []);
+      setStartDate(editingProtocol.startDate || new Date().toISOString().split('T')[0]);
       
       // Load protocol items
       const loadProtocolItems = async () => {
@@ -322,7 +324,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
         instructions: "",
       }];
     } else {
-      // For supplements, use protocol name as item name
+      // For supplements and exercise, use protocol name as item name
       if (selectedCategory === "supplements") {
         validItems = [{
           name: protocolName, // Use protocol name for supplement
@@ -347,6 +349,31 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           duration: "",
           restTime: "",
           weight: "",
+        }];
+      } else if (selectedCategory === "exercise") {
+        validItems = [{
+          name: protocolName, // Use protocol name for exercise
+          sets: protocolItems[0]?.sets || "",
+          reps: protocolItems[0]?.reps || "",
+          duration: protocolItems[0]?.duration || "",
+          restTime: protocolItems[0]?.restTime || "",
+          weight: protocolItems[0]?.weight || "",
+          timing: protocolItems[0]?.timing || "morning",
+          frequency: protocolItems[0]?.frequency || "daily",
+          instructions: protocolItems[0]?.instructions || "",
+          dosageAmount: "",
+          dosageUnit: "",
+          formFactor: "",
+          cyclingType: "",
+          onCycleDays: "",
+          offCycleDays: "",
+          currentCyclePhase: "",
+          cycleStartDate: "",
+          cycleEndDate: "",
+          trackingKpis: [],
+          startTime: "",
+          endTime: "",
+          fastingType: "",
         }];
       } else {
         // For other categories, validate items normally
@@ -373,6 +400,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
             category: selectedCategory,
             goals: selectedGoals,
             color: "#14B8A6",
+            startDate: startDate,
           }
         });
 
@@ -414,6 +442,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           goals: selectedGoals,
           isActive: true,
           color: "#14B8A6",
+          startDate: startDate,
           userId: 1, // This will be set by the backend
         });
 
@@ -580,6 +609,17 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                 value={protocolDescription}
                 onChange={(e) => setProtocolDescription(e.target.value)}
                 rows={2}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
               />
             </div>
           </div>

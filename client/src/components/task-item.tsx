@@ -9,12 +9,14 @@ interface TaskItemProps {
   task: Task;
   protocolItem: ProtocolItem;
   onToggle: (taskId: number, completed: boolean) => void;
+  isFutureDate?: boolean;
 }
 
-export default function TaskItem({ task, protocolItem, onToggle }: TaskItemProps) {
+export default function TaskItem({ task, protocolItem, onToggle, isFutureDate = false }: TaskItemProps) {
   const [isToggling, setIsToggling] = useState(false);
 
   const handleToggle = async () => {
+    if (isFutureDate) return;
     setIsToggling(true);
     await onToggle(task.id, !task.completed);
     setIsToggling(false);
@@ -28,8 +30,8 @@ export default function TaskItem({ task, protocolItem, onToggle }: TaskItemProps
         <Checkbox
           checked={task.completed}
           onCheckedChange={handleToggle}
-          disabled={isToggling}
-          className="w-6 h-6"
+          disabled={isToggling || isFutureDate}
+          className={`w-6 h-6 ${isFutureDate ? 'opacity-50' : ''}`}
         />
         <div>
           <div className="text-sm font-medium text-slate-800">
@@ -49,6 +51,9 @@ export default function TaskItem({ task, protocolItem, onToggle }: TaskItemProps
       </div>
       
       <div className="flex items-center space-x-2">
+        {isFutureDate && (
+          <span className="text-xs text-gray-500">Future</span>
+        )}
         {task.completed && (
           <CheckCircle className="text-success" size={16} />
         )}

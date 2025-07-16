@@ -27,6 +27,12 @@ Preferred communication style: Simple, everyday language.
 - **Added per-protocol compliance tracking** - Each protocol now shows its own L30D/L90D/L365D compliance based on actual task completion
 - **Created new API endpoint** - `/api/protocols/compliance` calculates protocol-specific completion percentages over different time ranges
 - **Updated protocols page** - Replaced hardcoded percentages with dynamic calculations from actual task completion data
+- **Auto-fill exercise name** - Exercise protocol name now auto-fills the exercise item name like supplements do
+- **Added start date field** - All protocols now have a start date field to track when protocol began
+- **Updated dashboard compliance display** - Changed "Active Protocols" to "Last 30 Days Performance" with real L30D data
+- **Calendar auto-population** - Future dates now automatically generate tasks based on active protocols
+- **Restricted future task completion** - Users can no longer check off tasks for future dates, only past dates can be modified
+- **Task generation respects start dates** - Protocols only generate tasks after their configured start date
 
 ## System Architecture
 

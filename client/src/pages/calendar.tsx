@@ -23,7 +23,20 @@ export default function Calendar() {
     queryKey: ['/api/tasks', { date: selectedDateString }],
     queryFn: async () => {
       const response = await fetch(`/api/tasks?date=${selectedDateString}`);
-      return response.json();
+      const tasks = await response.json();
+      
+      // If no tasks exist for future dates, generate them
+      if (tasks.length === 0 && selectedDateString > today) {
+        const generateResponse = await apiRequest("POST", "/api/tasks/generate", { 
+          date: selectedDateString 
+        });
+        const result = await generateResponse.json();
+        // Fetch the newly generated tasks
+        const newTasksResponse = await fetch(`/api/tasks?date=${selectedDateString}`);
+        return newTasksResponse.json();
+      }
+      
+      return tasks;
     },
   });
 
@@ -41,6 +54,10 @@ export default function Calendar() {
   });
 
   const handleTaskToggle = (taskId: number, completed: boolean) => {
+    // Prevent checking off future tasks
+    if (selectedDateString > today) {
+      return;
+    }
     toggleTaskMutation.mutate({ taskId, completed });
   };
 
@@ -154,6 +171,7 @@ export default function Calendar() {
                     task={task}
                     protocolItem={item}
                     onToggle={handleTaskToggle}
+                    isFutureDate={selectedDateString > today}
                   />
                 ) : null;
               })

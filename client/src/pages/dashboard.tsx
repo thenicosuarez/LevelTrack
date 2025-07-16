@@ -119,6 +119,16 @@ export default function Dashboard() {
 
   const activeProtocols = protocols.filter(p => p.isActive);
 
+  // Get compliance data for active protocols
+  const { data: protocolCompliance = {} } = useQuery<Record<number, number>>({
+    queryKey: ['/api/protocols/compliance', 30],
+    queryFn: async () => {
+      const response = await fetch('/api/protocols/compliance?days=30');
+      return response.json();
+    },
+    enabled: activeProtocols.length > 0,
+  });
+
   return (
     <div className="px-4 py-6 space-y-6">
       {/* Welcome Section */}
@@ -228,7 +238,7 @@ export default function Dashboard() {
           {/* Active Protocols within Today's Protocol */}
           {activeProtocols.length > 0 && (
             <div className="mt-6 pt-4 border-t">
-              <h4 className="font-medium text-slate-700 mb-3">Active Protocols</h4>
+              <h4 className="font-medium text-slate-700 mb-3">Last 30 Days Performance</h4>
               <div className="space-y-2">
                 {activeProtocols.map((protocol) => (
                   <div key={protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -245,9 +255,9 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-bold text-primary">
-                        {Math.floor(Math.random() * 20) + 80}%
+                        {protocolCompliance[protocol.id] || 0}%
                       </div>
-                      <div className="text-xs text-gray-600">Compliance</div>
+                      <div className="text-xs text-gray-600">L30D</div>
                     </div>
                   </div>
                 ))}

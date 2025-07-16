@@ -22,6 +22,7 @@ export const protocols = pgTable("protocols", {
   isActive: boolean("is_active").default(true),
   color: text("color").default("#14B8A6"),
   goals: text("goals").array().default([]),
+  startDate: text("start_date"), // YYYY-MM-DD format
   createdAt: timestamp("created_at").defaultNow(),
 });
 

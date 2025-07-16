@@ -196,7 +196,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get active protocols for the user
       const protocols = await storage.getProtocols(currentUserId);
-      const activeProtocols = protocols.filter(p => p.isActive);
+      const activeProtocols = protocols.filter(p => {
+        // Only include protocols that have started
+        if (p.startDate && p.startDate > targetDate) {
+          return false;
+        }
+        return p.isActive;
+      });
       
       // Generate tasks for each protocol
       const generatedTasks = [];
