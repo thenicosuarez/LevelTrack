@@ -159,11 +159,6 @@ export default function Protocols() {
     toggleProtocolMutation.mutate({ id, isActive: !isActive });
   };
 
-  const handleEditProtocol = (protocol: Protocol) => {
-    setSelectedProtocol(protocol);
-    setShowProtocolEditor(true);
-  };
-
   if (isLoading) {
     return (
       <div className="px-4 py-6">
@@ -327,15 +322,15 @@ export default function Protocols() {
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance30Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">97%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance90Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">92%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance365Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">32%</div>
                   </div>
                 </div>
               ))}
@@ -394,15 +389,15 @@ export default function Protocols() {
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance30Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">97%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance90Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">92%</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-primary">{compliance365Days[protocol.id] || 0}%</div>
+                    <div className="text-xs font-semibold text-primary">32%</div>
                   </div>
                 </div>
               ))}

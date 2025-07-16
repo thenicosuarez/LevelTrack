@@ -137,6 +137,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Protocol compliance route
+  app.get("/api/protocols/compliance", async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const protocols = await storage.getProtocols(currentUserId);
+      const tasks = await storage.getTasksForDateRange(currentUserId, startDate, endDate);
+      
+      const complianceData: Record<number, { total: number; completed: number }> = {};
+      
+      // Initialize compliance data for each protocol
+      protocols.forEach(protocol => {
+        complianceData[protocol.id] = { total: 0, completed: 0 };
+      });
+      
+      // Calculate compliance for each protocol
+      tasks.forEach(task => {
+        if (complianceData[task.protocolId]) {
+          complianceData[task.protocolId].total++;
+          if (task.completed) {
+            complianceData[task.protocolId].completed++;
+          }
+        }
+      });
+      
+      // Convert to percentage
+      const compliancePercentages: Record<number, number> = {};
+      Object.entries(complianceData).forEach(([protocolId, data]) => {
+        const percentage = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
+        compliancePercentages[parseInt(protocolId)] = percentage;
+      });
+      
+      res.json(compliancePercentages);
+    } catch (error) {
+      console.error("Protocol compliance error:", error);
+      res.status(500).json({ error: "Failed to calculate protocol compliance" });
+    }
+  });
+
   // Task routes
   app.get("/api/tasks", async (req, res) => {
     try {

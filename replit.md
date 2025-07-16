@@ -22,6 +22,12 @@ Preferred communication style: Simple, everyday language.
 - **Added sleep tracking placeholder** - Analytics now shows sleep data section ready for Apple Health/Oura integration
 - **Added IU dosage unit** - Added International Units (IU) as dosage option for vitamin D and other supplements
 
+### January 17, 2025 - Protocol Compliance Tracking
+- **Fixed compliance percentage fluctuation** - Added real protocol compliance calculation endpoint to show accurate completion rates
+- **Added per-protocol compliance tracking** - Each protocol now shows its own L30D/L90D/L365D compliance based on actual task completion
+- **Created new API endpoint** - `/api/protocols/compliance` calculates protocol-specific completion percentages over different time ranges
+- **Updated protocols page** - Replaced hardcoded percentages with dynamic calculations from actual task completion data
+
 ## System Architecture
 
 ### Frontend Architecture
