@@ -198,6 +198,50 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     },
   });
 
+  const updateProtocolMutation = useMutation({
+    mutationFn: async (data: { id: number; updates: Partial<InsertProtocol> }) => {
+      const response = await apiRequest("PATCH", `/api/protocols/${data.id}`, data.updates);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+      handleClose();
+      toast({
+        title: "Success",
+        description: "Protocol updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update protocol",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const archiveProtocolMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("PATCH", `/api/protocols/${id}`, { isActive: false });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+      handleClose();
+      toast({
+        title: "Success",
+        description: "Protocol archived successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to archive protocol",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -252,32 +296,47 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     }
 
     try {
-      const protocol = await createProtocolMutation.mutateAsync({
-        name: protocolName,
-        description: protocolDescription,
-        category: selectedCategory,
-        goals: selectedGoals,
-        isActive: true,
-        color: "#14B8A6",
-        userId: 1, // This will be set by the backend
-      });
-
-      if (protocol.id) {
-        await createProtocolItemMutation.mutateAsync({
-          protocolId: protocol.id,
-          items: validItems.map(item => ({
-            ...item,
-            dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
-            sets: item.sets ? parseInt(item.sets) : null,
-            reps: item.reps ? parseInt(item.reps) : null,
-            duration: item.duration ? parseInt(item.duration) : null,
-            restTime: item.restTime ? parseInt(item.restTime) : null,
-            weight: item.weight ? parseInt(item.weight) : null,
-          }))
+      if (editingProtocol) {
+        // Update existing protocol
+        await updateProtocolMutation.mutateAsync({
+          id: editingProtocol.id,
+          updates: {
+            name: protocolName,
+            description: protocolDescription,
+            category: selectedCategory,
+            goals: selectedGoals,
+            color: "#14B8A6",
+          }
         });
+      } else {
+        // Create new protocol
+        const protocol = await createProtocolMutation.mutateAsync({
+          name: protocolName,
+          description: protocolDescription,
+          category: selectedCategory,
+          goals: selectedGoals,
+          isActive: true,
+          color: "#14B8A6",
+          userId: 1, // This will be set by the backend
+        });
+
+        if (protocol.id) {
+          await createProtocolItemMutation.mutateAsync({
+            protocolId: protocol.id,
+            items: validItems.map(item => ({
+              ...item,
+              dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+              sets: item.sets ? parseInt(item.sets) : null,
+              reps: item.reps ? parseInt(item.reps) : null,
+              duration: item.duration ? parseInt(item.duration) : null,
+              restTime: item.restTime ? parseInt(item.restTime) : null,
+              weight: item.weight ? parseInt(item.weight) : null,
+            }))
+          });
+        }
       }
     } catch (error) {
-      console.error("Error creating protocol:", error);
+      console.error("Error saving protocol:", error);
     }
   };
 
@@ -752,12 +811,24 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
             <Button type="button" variant="outline" className="flex-1" onClick={handleClose}>
               Cancel
             </Button>
+            {editingProtocol && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => archiveProtocolMutation.mutate(editingProtocol.id)}
+                disabled={archiveProtocolMutation.isPending}
+              >
+                {archiveProtocolMutation.isPending ? "Archiving..." : "Archive"}
+              </Button>
+            )}
             <Button 
               type="submit" 
               className="flex-1"
-              disabled={createProtocolMutation.isPending}
+              disabled={createProtocolMutation.isPending || updateProtocolMutation.isPending}
             >
-              {createProtocolMutation.isPending ? "Creating..." : "Create Protocol"}
+              {editingProtocol 
+                ? (updateProtocolMutation.isPending ? "Saving..." : "Save Changes")
+                : (createProtocolMutation.isPending ? "Creating..." : "Create Protocol")}
             </Button>
           </div>
         </form>
