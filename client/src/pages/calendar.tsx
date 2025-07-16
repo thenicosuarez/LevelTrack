@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { generateCalendarDays, getMonthName, formatDate } from "@/lib/date-utils";
+import { apiRequest } from "@/lib/queryClient";
 import TaskItem from "@/components/task-item";
 import ProtocolBuilder from "@/components/protocol-builder";
 import type { Task, ProtocolItem } from "@shared/schema";
@@ -11,6 +12,7 @@ import type { Task, ProtocolItem } from "@shared/schema";
 export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
+  const queryClient = useQueryClient();
   const today = formatDate(new Date());
   
   const year = selectedDate.getFullYear();
@@ -19,8 +21,28 @@ export default function Calendar() {
 
   const { data: tasks = [] } = useQuery<Task[]>({
     queryKey: ['/api/tasks', { date: selectedDateString }],
-    queryFn: () => fetch(`/api/tasks?date=${selectedDateString}`).then(res => res.json()),
+    queryFn: async () => {
+      const response = await fetch(`/api/tasks?date=${selectedDateString}`);
+      return response.json();
+    },
   });
+
+  const toggleTaskMutation = useMutation({
+    mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { 
+        completed,
+        completedAt: completed ? new Date().toISOString() : null
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+    },
+  });
+
+  const handleTaskToggle = (taskId: number, completed: boolean) => {
+    toggleTaskMutation.mutate({ taskId, completed });
+  };
 
   const { data: protocolItems = [] } = useQuery<ProtocolItem[]>({
     queryKey: ['/api/protocol-items'],
@@ -131,7 +153,7 @@ export default function Calendar() {
                     key={task.id}
                     task={task}
                     protocolItem={item}
-                    onToggle={() => {}} // TODO: Implement toggle
+                    onToggle={handleTaskToggle}
                   />
                 ) : null;
               })

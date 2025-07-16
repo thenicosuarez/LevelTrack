@@ -37,25 +37,17 @@ export default function TaskItem({ task, protocolItem, onToggle }: TaskItemProps
           </div>
           <div className="text-xs text-gray-600 flex items-center space-x-1">
             <Clock size={12} />
-            <span>{formatTime(protocolItem.timing)}</span>
-            {protocolItem.dosage && <span>• {protocolItem.dosage}</span>}
+            <span>{formatTime(protocolItem.timing || 'morning')}</span>
+            {protocolItem.dosageAmount && protocolItem.dosageUnit && (
+              <span>• {protocolItem.dosageAmount} {protocolItem.dosageUnit}</span>
+            )}
           </div>
         </div>
       </div>
       
       <div className="flex items-center space-x-2">
-        {task.completed ? (
+        {task.completed && (
           <CheckCircle className="text-success" size={16} />
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleToggle}
-            disabled={isToggling}
-            className="text-xs task-pending px-3 py-1 rounded-full"
-          >
-            {isToggling ? "..." : "Mark"}
-          </Button>
         )}
       </div>
     </div>

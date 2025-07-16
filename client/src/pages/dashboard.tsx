@@ -89,14 +89,11 @@ export default function Dashboard() {
 
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
-      const response = await apiRequest(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ completed }),
+      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { 
+        completed,
+        completedAt: completed ? new Date().toISOString() : null
       });
-      return response;
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
