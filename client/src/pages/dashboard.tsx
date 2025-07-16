@@ -11,7 +11,7 @@ import ProtocolBuilder from "@/components/protocol-builder";
 import VoiceNoteProcessor from "@/components/voice-note-processor";
 import LabelScanner from "@/components/label-scanner";
 import ProgressChart from "@/components/progress-chart";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
 
@@ -66,6 +66,23 @@ export default function Dashboard() {
     },
     enabled: protocols.length > 0,
   });
+
+  // Auto-generate tasks for today
+  const generateTasksMutation = useMutation({
+    mutationFn: async (date: string) => {
+      const response = await apiRequest("POST", "/api/tasks/generate", { date });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+    },
+  });
+
+  // Generate tasks when dashboard loads
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    generateTasksMutation.mutate(today);
+  }, []);
 
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {

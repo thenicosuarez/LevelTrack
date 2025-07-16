@@ -329,13 +329,29 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
         await updateProtocolItemMutation.mutateAsync({
           protocolId: editingProtocol.id,
           items: validItems.map(item => ({
-            ...item,
+            name: item.name,
             dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+            dosageUnit: item.dosageUnit || null,
+            formFactor: item.formFactor || null,
+            cyclingType: item.cyclingType || null,
+            onCycleDays: item.onCycleDays ? parseInt(item.onCycleDays) : null,
+            offCycleDays: item.offCycleDays ? parseInt(item.offCycleDays) : null,
+            currentCyclePhase: item.currentCyclePhase || null,
+            cycleStartDate: item.cycleStartDate || null,
+            cycleEndDate: item.cycleEndDate || null,
+            trackingKpis: item.trackingKpis || [],
+            startTime: item.startTime || null,
+            endTime: item.endTime || null,
+            fastingType: item.fastingType || null,
             sets: item.sets ? parseInt(item.sets) : null,
             reps: item.reps ? parseInt(item.reps) : null,
             duration: item.duration ? parseInt(item.duration) : null,
             restTime: item.restTime ? parseInt(item.restTime) : null,
             weight: item.weight ? parseInt(item.weight) : null,
+            timing: item.timing || null,
+            frequency: item.frequency || "daily",
+            instructions: item.instructions || null,
+            order: 0
           }))
         });
       } else {
@@ -354,13 +370,29 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           await createProtocolItemMutation.mutateAsync({
             protocolId: protocol.id,
             items: validItems.map(item => ({
-              ...item,
+              name: item.name,
               dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+              dosageUnit: item.dosageUnit || null,
+              formFactor: item.formFactor || null,
+              cyclingType: item.cyclingType || null,
+              onCycleDays: item.onCycleDays ? parseInt(item.onCycleDays) : null,
+              offCycleDays: item.offCycleDays ? parseInt(item.offCycleDays) : null,
+              currentCyclePhase: item.currentCyclePhase || null,
+              cycleStartDate: item.cycleStartDate || null,
+              cycleEndDate: item.cycleEndDate || null,
+              trackingKpis: item.trackingKpis || [],
+              startTime: item.startTime || null,
+              endTime: item.endTime || null,
+              fastingType: item.fastingType || null,
               sets: item.sets ? parseInt(item.sets) : null,
               reps: item.reps ? parseInt(item.reps) : null,
               duration: item.duration ? parseInt(item.duration) : null,
               restTime: item.restTime ? parseInt(item.restTime) : null,
               weight: item.weight ? parseInt(item.weight) : null,
+              timing: item.timing || null,
+              frequency: item.frequency || "daily",
+              instructions: item.instructions || null,
+              order: 0
             }))
           });
         }

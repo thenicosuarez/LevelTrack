@@ -230,7 +230,7 @@ export default function Protocols() {
                   
                   <div className="text-center">
                     <div className="text-xs text-gray-600">
-                      {protocol.name === 'Zyrtec' ? '10mg' : 
+                      {protocol.name === 'Zyrtec' ? '10 mg' : 
                        protocol.name === 'Vit D3+K2' ? '5,000 IU' : 
                        protocol.name === 'Shilajit' ? '200 mg' : 'Daily'}
                     </div>
