@@ -212,9 +212,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const taskId = parseInt(req.params.id);
       const updates = req.body;
       
-      // Set completedAt if completed is being set to true
+      // Handle timestamp properly - don't set it here, let the database handle it
       if (updates.completed === true && !updates.completedAt) {
-        updates.completedAt = new Date();
+        // Remove completedAt from updates to avoid timestamp conversion issues
+        delete updates.completedAt;
       } else if (updates.completed === false) {
         updates.completedAt = null;
       }

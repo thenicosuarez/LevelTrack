@@ -322,15 +322,43 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
         instructions: "",
       }];
     } else {
-      // For other categories, validate items normally
-      validItems = protocolItems.filter(item => item.name.trim());
-      if (validItems.length === 0) {
-        toast({
-          title: "Error",
-          description: "At least one protocol item is required",
-          variant: "destructive",
-        });
-        return;
+      // For supplements, use protocol name as item name
+      if (selectedCategory === "supplements") {
+        validItems = [{
+          name: protocolName, // Use protocol name for supplement
+          dosageAmount: protocolItems[0]?.dosageAmount || "",
+          dosageUnit: protocolItems[0]?.dosageUnit || "mg",
+          formFactor: protocolItems[0]?.formFactor || "",
+          timing: protocolItems[0]?.timing || "morning",
+          frequency: protocolItems[0]?.frequency || "daily",
+          instructions: protocolItems[0]?.instructions || "",
+          cyclingType: protocolItems[0]?.cyclingType || "",
+          onCycleDays: protocolItems[0]?.onCycleDays || "",
+          offCycleDays: protocolItems[0]?.offCycleDays || "",
+          currentCyclePhase: protocolItems[0]?.currentCyclePhase || "",
+          cycleStartDate: protocolItems[0]?.cycleStartDate || "",
+          cycleEndDate: protocolItems[0]?.cycleEndDate || "",
+          trackingKpis: protocolItems[0]?.trackingKpis || [],
+          startTime: "",
+          endTime: "",
+          fastingType: "",
+          sets: "",
+          reps: "",
+          duration: "",
+          restTime: "",
+          weight: "",
+        }];
+      } else {
+        // For other categories, validate items normally
+        validItems = protocolItems.filter(item => item.name.trim());
+        if (validItems.length === 0) {
+          toast({
+            title: "Error",
+            description: "At least one protocol item is required",
+            variant: "destructive",
+          });
+          return;
+        }
       }
     }
 
@@ -624,38 +652,45 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor={`item-name-${index}`} className="text-xs">
-                          {selectedCategory === "supplements" ? "Supplement Name" : 
-                           selectedCategory === "nutrition" ? "Food Name" : 
-                           selectedCategory === "exercise" ? "Exercise Name" : "Name"}
-                        </Label>
-                        <div className="flex space-x-2">
+                      {selectedCategory !== "supplements" && (
+                        <div>
+                          <Label htmlFor={`item-name-${index}`} className="text-xs">
+                            {selectedCategory === "nutrition" ? "Food Name" : 
+                             selectedCategory === "exercise" ? "Exercise Name" : "Name"}
+                          </Label>
                           <Input
                             id={`item-name-${index}`}
-                            placeholder={selectedCategory === "supplements" ? "e.g., Omega 3" : 
-                                       selectedCategory === "nutrition" ? "e.g., Oatmeal" : 
+                            placeholder={selectedCategory === "nutrition" ? "e.g., Oatmeal" : 
                                        selectedCategory === "exercise" ? "e.g., Push-ups" : "Name"}
                             value={item.name}
                             onChange={(e) => updateProtocolItem(index, "name", e.target.value)}
                             className="flex-1"
                           />
-                          {selectedCategory === "supplements" && (
+                        </div>
+                      )}
+                      {selectedCategory === "supplements" && (
+                        <div>
+                          <Label className="text-xs">Supplement Name</Label>
+                          <div className="flex items-center space-x-2">
+                            <Input
+                              value={protocolName}
+                              disabled
+                              className="flex-1 bg-gray-50 text-gray-600"
+                            />
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
                               className="px-2"
                               onClick={() => {
-                                // This will eventually trigger the camera/label scanner
                                 alert("Camera feature coming soon!");
                               }}
                             >
                               <Camera size={16} />
                             </Button>
-                          )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       
                       {selectedCategory === "exercise" ? (
                         <div>

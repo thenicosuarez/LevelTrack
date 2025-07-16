@@ -8,6 +8,16 @@ Nurtur Stack (also known as Holistica) is a comprehensive web application design
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes: Latest modifications with dates
+
+### January 16, 2025 - Critical Bug Fixes
+- **Fixed task completion functionality** - Resolved timestamp handling errors preventing checkbox updates
+- **Fixed protocol editing** - Resolved DELETE items endpoint failures, dosage updates now save properly
+- **Fixed calendar compliance display** - Replaced random numbers with actual task completion calculations
+- **Simplified supplement naming** - Supplement name now auto-matches protocol name for streamlined workflow
+- **Enhanced database operations** - Fixed foreign key constraint handling for proper item deletion and recreation
+- **Improved error handling** - Added detailed logging for debugging protocol and task operations
+
 ## System Architecture
 
 ### Frontend Architecture
