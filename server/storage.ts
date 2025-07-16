@@ -27,6 +27,7 @@ export interface IStorage {
   createProtocolItem(item: InsertProtocolItem): Promise<ProtocolItem>;
   updateProtocolItem(id: number, item: Partial<ProtocolItem>): Promise<ProtocolItem>;
   deleteProtocolItem(id: number): Promise<void>;
+  deleteProtocolItems(protocolId: number): Promise<void>;
 
   // Tasks
   getTasks(userId: number, date?: string): Promise<Task[]>;
@@ -142,6 +143,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProtocolItem(id: number): Promise<void> {
     await db.delete(protocolItems).where(eq(protocolItems.id, id));
+  }
+
+  async deleteProtocolItems(protocolId: number): Promise<void> {
+    await db.delete(protocolItems).where(eq(protocolItems.protocolId, protocolId));
   }
 
   // Tasks

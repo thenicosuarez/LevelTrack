@@ -220,6 +220,22 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     },
   });
 
+  const updateProtocolItemMutation = useMutation({
+    mutationFn: async ({ protocolId, items }: { protocolId: number; items: ProtocolItemForm[] }) => {
+      // First, delete existing items
+      await apiRequest("DELETE", `/api/protocols/${protocolId}/items`);
+      
+      // Then create new items
+      const promises = items.map((item, index) => 
+        apiRequest("POST", `/api/protocols/${protocolId}/items`, {
+          ...item,
+          order: index
+        })
+      );
+      return Promise.all(promises);
+    },
+  });
+
   const archiveProtocolMutation = useMutation({
     mutationFn: async (id: number) => {
       const response = await apiRequest("PATCH", `/api/protocols/${id}`, { isActive: false });
@@ -307,6 +323,20 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
             goals: selectedGoals,
             color: "#14B8A6",
           }
+        });
+
+        // Update protocol items
+        await updateProtocolItemMutation.mutateAsync({
+          protocolId: editingProtocol.id,
+          items: validItems.map(item => ({
+            ...item,
+            dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+            sets: item.sets ? parseInt(item.sets) : null,
+            reps: item.reps ? parseInt(item.reps) : null,
+            duration: item.duration ? parseInt(item.duration) : null,
+            restTime: item.restTime ? parseInt(item.restTime) : null,
+            weight: item.weight ? parseInt(item.weight) : null,
+          }))
         });
       } else {
         // Create new protocol

@@ -126,6 +126,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/protocols/:id/items", async (req, res) => {
+    try {
+      await storage.deleteProtocolItems(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol items" });
+    }
+  });
+
   // Task routes
   app.get("/api/tasks", async (req, res) => {
     try {
