@@ -90,8 +90,7 @@ export default function Dashboard() {
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
       const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { 
-        completed,
-        completedAt: completed ? new Date().toISOString() : null
+        completed
       });
       return response.json();
     },

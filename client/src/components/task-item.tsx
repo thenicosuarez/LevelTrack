@@ -41,6 +41,9 @@ export default function TaskItem({ task, protocolItem, onToggle }: TaskItemProps
             {protocolItem.dosageAmount && protocolItem.dosageUnit && (
               <span>• {protocolItem.dosageAmount} {protocolItem.dosageUnit}</span>
             )}
+            {protocolItem.startTime && (
+              <span>• {protocolItem.startTime} - {protocolItem.endTime || 'ongoing'}</span>
+            )}
           </div>
         </div>
       </div>

@@ -17,6 +17,9 @@ Preferred communication style: Simple, everyday language.
 - **Simplified supplement naming** - Supplement name now auto-matches protocol name for streamlined workflow
 - **Enhanced database operations** - Fixed foreign key constraint handling for proper item deletion and recreation
 - **Improved error handling** - Added detailed logging for debugging protocol and task operations
+- **Reorganized protocol categories** - Split into "Intake" (Supplements/Nutrition) and "Physical Activity" (Exercise/Fasting) groups
+- **Removed dosage from fasting protocols** - Fasting now only shows time range without dosage fields
+- **Added sleep tracking placeholder** - Analytics now shows sleep data section ready for Apple Health/Oura integration
 
 ## System Architecture
 

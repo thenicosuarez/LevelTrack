@@ -20,10 +20,10 @@ interface ProtocolBuilderProps {
 }
 
 const categories = [
-  { id: "supplements", label: "Supplements", icon: Shield },
-  { id: "fasting", label: "Fasting", icon: Clock },
-  { id: "exercise", label: "Exercise", icon: Dumbbell },
-  { id: "nutrition", label: "Nutrition", icon: Utensils },
+  { id: "supplements", label: "Supplements", icon: Shield, group: "intake" },
+  { id: "nutrition", label: "Nutrition", icon: Utensils, group: "intake" },
+  { id: "exercise", label: "Exercise", icon: Dumbbell, group: "physical" },
+  { id: "fasting", label: "Fasting", icon: Clock, group: "physical" },
 ];
 
 const goals = [
@@ -497,32 +497,66 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Category Selection */}
-          <div className="grid grid-cols-2 gap-3">
-            {categories.map(({ id, label, icon: Icon }) => (
-              <Card 
-                key={id} 
-                className={`cursor-pointer transition-all ${
-                  selectedCategory === id 
-                    ? "border-primary bg-primary/10" 
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-                onClick={() => {
-                  setSelectedCategory(id);
-                  // Reset protocol items when switching categories
-                  setProtocolItems([getDefaultProtocolItem()]);
-                }}
-              >
-                <CardContent className="flex flex-col items-center space-y-2 p-4">
-                  <Icon className={selectedCategory === id ? "text-primary" : "text-gray-600"} size={24} />
-                  <span className={`text-sm font-medium ${
-                    selectedCategory === id ? "text-primary" : "text-gray-600"
-                  }`}>
-                    {label}
-                  </span>
-                </CardContent>
-              </Card>
-            ))}
+          {/* Category Selection with Groups */}
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Intake Protocols</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {categories.filter(c => c.group === "intake").map(({ id, label, icon: Icon }) => (
+                  <Card 
+                    key={id} 
+                    className={`cursor-pointer transition-all ${
+                      selectedCategory === id 
+                        ? "border-primary bg-primary/10" 
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                    onClick={() => {
+                      setSelectedCategory(id);
+                      // Reset protocol items when switching categories
+                      setProtocolItems([getDefaultProtocolItem()]);
+                    }}
+                  >
+                    <CardContent className="flex flex-col items-center space-y-2 p-4">
+                      <Icon className={selectedCategory === id ? "text-primary" : "text-gray-600"} size={24} />
+                      <span className={`text-sm font-medium ${
+                        selectedCategory === id ? "text-primary" : "text-gray-600"
+                      }`}>
+                        {label}
+                      </span>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Physical Activity</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {categories.filter(c => c.group === "physical").map(({ id, label, icon: Icon }) => (
+                  <Card 
+                    key={id} 
+                    className={`cursor-pointer transition-all ${
+                      selectedCategory === id 
+                        ? "border-primary bg-primary/10" 
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                    onClick={() => {
+                      setSelectedCategory(id);
+                      // Reset protocol items when switching categories
+                      setProtocolItems([getDefaultProtocolItem()]);
+                    }}
+                  >
+                    <CardContent className="flex flex-col items-center space-y-2 p-4">
+                      <Icon className={selectedCategory === id ? "text-primary" : "text-gray-600"} size={24} />
+                      <span className={`text-sm font-medium ${
+                        selectedCategory === id ? "text-primary" : "text-gray-600"
+                      }`}>
+                        {label}
+                      </span>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Protocol Details */}
@@ -703,7 +737,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                             onChange={(e) => updateProtocolItem(index, "duration", e.target.value)}
                           />
                         </div>
-                      ) : (
+                      ) : selectedCategory !== "fasting" ? (
                         <div>
                           <Label htmlFor={`item-dosage-${index}`} className="text-xs">
                             {selectedCategory === "nutrition" ? "Portion" : "Dosage"}
@@ -740,7 +774,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                             </Select>
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
 
                     {/* Form Factor for Supplements */}
