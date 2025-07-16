@@ -20,6 +20,7 @@ Preferred communication style: Simple, everyday language.
 - **Reorganized protocol categories** - Split into "Intake" (Supplements/Nutrition) and "Physical Activity" (Exercise/Fasting) groups
 - **Removed dosage from fasting protocols** - Fasting now only shows time range without dosage fields
 - **Added sleep tracking placeholder** - Analytics now shows sleep data section ready for Apple Health/Oura integration
+- **Added IU dosage unit** - Added International Units (IU) as dosage option for vitamin D and other supplements
 
 ## System Architecture
 

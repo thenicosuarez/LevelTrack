@@ -759,6 +759,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="IU">IU</SelectItem>
                                 <SelectItem value="mg">mg</SelectItem>
                                 <SelectItem value="g">g</SelectItem>
                                 <SelectItem value="mcg">mcg</SelectItem>
