@@ -3,12 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Filter, Shield, Clock, Dumbbell, Utensils } from "lucide-react";
+import { Plus, Search, Filter, Shield, Clock, Dumbbell, Utensils, Camera, Mic } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import ProtocolBuilder from "@/components/protocol-builder";
 import ProtocolCard from "@/components/protocol-card";
+import LabelScanner from "@/components/label-scanner";
+import VoiceNoteProcessor from "@/components/voice-note-processor";
 import type { Protocol, ProtocolItem } from "@shared/schema";
 
 const categoryIcons = {
@@ -27,6 +29,8 @@ export default function Protocols() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30");
+  const [showScanner, setShowScanner] = useState(false);
+  const [showVoiceNote, setShowVoiceNote] = useState(false);
 
   const { data: protocols = [], isLoading } = useQuery<Protocol[]>({
     queryKey: ['/api/protocols'],
@@ -52,10 +56,19 @@ export default function Protocols() {
     if (protocolItems.length === 0) return 'N/A';
     
     const firstItem = protocolItems[0];
+    let dosageText = '';
+    
     if (firstItem.dosageAmount && firstItem.dosageUnit) {
-      return `${firstItem.dosageAmount.toLocaleString()} ${firstItem.dosageUnit}`;
+      dosageText = `${firstItem.dosageAmount.toLocaleString()} ${firstItem.dosageUnit}`;
+    } else if (firstItem.startTime && firstItem.endTime) {
+      dosageText = `${firstItem.startTime} - ${firstItem.endTime}`;
+    } else if (firstItem.duration) {
+      dosageText = `${firstItem.duration} min`;
     }
-    return 'Daily';
+    
+    // Add frequency
+    const frequency = firstItem.frequency || 'daily';
+    return dosageText ? `${dosageText} / ${frequency}` : frequency;
   };
 
   const deleteProtocolMutation = useMutation({
@@ -141,6 +154,26 @@ export default function Protocols() {
         </Button>
       </div>
 
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <Button 
+          variant="outline" 
+          className="justify-start" 
+          onClick={() => setShowScanner(true)}
+        >
+          <Camera size={16} className="mr-2" />
+          Scan Label
+        </Button>
+        <Button 
+          variant="outline" 
+          className="justify-start"
+          onClick={() => setShowVoiceNote(true)}
+        >
+          <Mic size={16} className="mr-2" />
+          Voice Note
+        </Button>
+      </div>
+
       {/* Search and Filter */}
       <div className="space-y-4">
         <div className="relative">
@@ -215,27 +248,27 @@ export default function Protocols() {
         </CardContent>
       </Card>
 
-      {/* Current Protocols */}
+      {/* Intake Protocols */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">Current Protocols</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Intake Protocols</h2>
         
-        {filteredProtocols.length > 0 ? (
+        {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'nutrition').length > 0 ? (
           <Card>
             <CardContent className="p-0">
               {/* Header Row */}
               <div className="grid grid-cols-6 gap-3 p-3 bg-gray-50 text-xs font-medium text-gray-600 border-b">
                 <div className="col-span-2">Protocol</div>
-                <div className="text-center">Dosage</div>
+                <div className="text-center">Dosage / Frequency</div>
                 <div className="text-center">L30D</div>
                 <div className="text-center">L90D</div>
                 <div className="text-center">L365D</div>
               </div>
               
               {/* Data Rows */}
-              {filteredProtocols.map((protocol, index) => (
+              {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'nutrition').map((protocol, index, arr) => (
                 <div 
                   key={protocol.id} 
-                  className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== filteredProtocols.length - 1 ? 'border-b' : ''}`}
+                  className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== arr.length - 1 ? 'border-b' : ''}`}
                   onClick={() => {
                     setSelectedProtocol(protocol);
                     setShowProtocolEditor(true);
@@ -276,16 +309,75 @@ export default function Protocols() {
             </CardContent>
           </Card>
         ) : (
-          <div className="text-center py-12 text-gray-500">
-            <Shield size={48} className="mx-auto mb-4 text-gray-300" />
-            <p>No protocols found</p>
-            <Button 
-              variant="outline" 
-              className="mt-2"
-              onClick={() => setShowProtocolBuilder(true)}
-            >
-              Create Your First Protocol
-            </Button>
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-sm">No intake protocols found</p>
+          </div>
+        )}
+      </div>
+
+      {/* Physical Activity Protocols */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800">Physical Activity</h2>
+        
+        {filteredProtocols.filter(p => p.category === 'exercise' || p.category === 'fasting').length > 0 ? (
+          <Card>
+            <CardContent className="p-0">
+              {/* Header Row */}
+              <div className="grid grid-cols-6 gap-3 p-3 bg-gray-50 text-xs font-medium text-gray-600 border-b">
+                <div className="col-span-2">Protocol</div>
+                <div className="text-center">Duration / Frequency</div>
+                <div className="text-center">L30D</div>
+                <div className="text-center">L90D</div>
+                <div className="text-center">L365D</div>
+              </div>
+              
+              {/* Data Rows */}
+              {filteredProtocols.filter(p => p.category === 'exercise' || p.category === 'fasting').map((protocol, index, arr) => (
+                <div 
+                  key={protocol.id} 
+                  className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== arr.length - 1 ? 'border-b' : ''}`}
+                  onClick={() => {
+                    setSelectedProtocol(protocol);
+                    setShowProtocolEditor(true);
+                  }}
+                >
+                  <div className="col-span-2 flex items-center space-x-3">
+                    <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
+                      {(() => {
+                        const Icon = categoryIcons[protocol.category as keyof typeof categoryIcons] || Shield;
+                        return <Icon size={12} className="text-primary" />;
+                      })()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">{protocol.name}</div>
+                      <div className="text-xs text-gray-600">{protocol.description}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-xs text-gray-600">
+                      {getDosageDisplay(protocol)}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-xs font-semibold text-primary">97%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-xs font-semibold text-primary">92%</div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="text-xs font-semibold text-primary">32%</div>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-sm">No physical activity protocols found</p>
           </div>
         )}
       </div>
@@ -364,6 +456,26 @@ export default function Protocols() {
             setSelectedProtocol(null);
           }}
           editingProtocol={selectedProtocol}
+        />
+      )}
+
+      {/* Label Scanner Modal */}
+      {showScanner && (
+        <LabelScanner 
+          onProtocolCreated={() => {
+            setShowScanner(false);
+            queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+          }}
+        />
+      )}
+
+      {/* Voice Note Modal */}
+      {showVoiceNote && (
+        <VoiceNoteProcessor 
+          onProtocolCreated={() => {
+            setShowVoiceNote(false);
+            queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
+          }}
         />
       )}
     </div>
