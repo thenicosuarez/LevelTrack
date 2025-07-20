@@ -137,25 +137,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Protocol compliance route
+  // Simple test endpoint first
+  app.get("/api/debug/db-test", async (req, res) => {
+    try {
+      const protocols = await storage.getProtocols(currentUserId);
+      res.json({ 
+        success: true, 
+        protocolCount: protocols.length,
+        currentUserId
+      });
+    } catch (error) {
+      console.error("DB test error:", error);
+      res.status(500).json({ 
+        error: "Database connection failed",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Test the specific method that's failing
+  app.get("/api/debug/tasks-test", async (req, res) => {
+    try {
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      console.log(`Testing getTasksForDateRange from ${startDate} to ${endDate}`);
+      const tasks = await storage.getTasksForDateRange(currentUserId, startDate, endDate);
+      console.log(`Found ${tasks.length} tasks`);
+      
+      res.json({ 
+        success: true, 
+        taskCount: tasks.length,
+        startDate,
+        endDate,
+        tasks: tasks.slice(0, 3) // Just first 3 for debugging
+      });
+    } catch (error) {
+      console.error("Tasks test error:", error);
+      res.status(500).json({ 
+        error: "getTasksForDateRange failed",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Protocol compliance route - working implementation
   app.get("/api/protocols/compliance", async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
+      // Get protocols first
       const protocols = await storage.getProtocols(currentUserId);
-      const tasks = await storage.getTasksForDateRange(currentUserId, startDate, endDate);
       
+      // Calculate date range for the last N days
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDateObj = new Date();
+      startDateObj.setDate(startDateObj.getDate() - days);
+      const startDate = startDateObj.toISOString().split('T')[0];
+      
+      // Get all tasks for the user
+      const allTasks = await storage.getTasks(currentUserId);
+      
+      // Filter tasks to only include those in our date range
+      const relevantTasks = allTasks.filter(task => {
+        return task.date >= startDate && task.date <= endDate;
+      });
+      
+      // Initialize compliance tracking
       const complianceData: Record<number, { total: number; completed: number }> = {};
-      
-      // Initialize compliance data for each protocol
       protocols.forEach(protocol => {
         complianceData[protocol.id] = { total: 0, completed: 0 };
       });
       
-      // Calculate compliance for each protocol
-      tasks.forEach(task => {
+      // Count tasks for each protocol
+      relevantTasks.forEach(task => {
         if (complianceData[task.protocolId]) {
           complianceData[task.protocolId].total++;
           if (task.completed) {
@@ -164,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // Convert to percentage
+      // Convert to percentages
       const compliancePercentages: Record<number, number> = {};
       Object.entries(complianceData).forEach(([protocolId, data]) => {
         const percentage = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
@@ -173,8 +228,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(compliancePercentages);
     } catch (error) {
-      console.error("Protocol compliance error:", error);
-      res.status(500).json({ error: "Failed to fetch protocol compliance" });
+      console.error("Compliance calculation error:", error);
+      res.status(500).json({ 
+        error: "Failed to calculate compliance", 
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

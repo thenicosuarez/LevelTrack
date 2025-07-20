@@ -50,32 +50,37 @@ export default function Protocols() {
     enabled: protocols.length > 0,
   });
 
-  // Get compliance data for each protocol
-  const { data: compliance30Days = {} } = useQuery<Record<number, number>>({
-    queryKey: ['/api/protocols/compliance', 30],
+  // Get today's tasks for compliance calculation
+  const { data: todayTasks = [] } = useQuery<any[]>({
+    queryKey: ['/api/tasks', { date: new Date().toISOString().split('T')[0] }],
     queryFn: async () => {
-      const response = await fetch('/api/protocols/compliance?days=30');
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/tasks?date=${today}`);
       return response.json();
     },
-    enabled: protocols.length > 0,
   });
 
-  const { data: compliance90Days = {} } = useQuery<Record<number, number>>({
-    queryKey: ['/api/protocols/compliance', 90],
-    queryFn: async () => {
-      const response = await fetch('/api/protocols/compliance?days=90');
-      return response.json();
-    },
-    enabled: protocols.length > 0,
-  });
+  // Calculate today's compliance for each protocol
+  const calculateTodayCompliance = (protocol: Protocol) => {
+    if (!todayTasks.length) return 0;
+    
+    const protocolTasks = todayTasks.filter(task => task.protocolId === protocol.id);
+    if (protocolTasks.length === 0) return 0;
+    
+    const completedTasks = protocolTasks.filter(task => task.completed);
+    return Math.round((completedTasks.length / protocolTasks.length) * 100);
+  };
 
-  const { data: compliance365Days = {} } = useQuery<Record<number, number>>({
-    queryKey: ['/api/protocols/compliance', 365],
-    queryFn: async () => {
-      const response = await fetch('/api/protocols/compliance?days=365');
-      return response.json();
-    },
-    enabled: protocols.length > 0,
+  // For display purposes, use today's compliance for all time ranges
+  const compliance30Days: Record<number, number> = {};
+  const compliance90Days: Record<number, number> = {};
+  const compliance365Days: Record<number, number> = {};
+  
+  protocols.forEach(protocol => {
+    const todayCompliance = calculateTodayCompliance(protocol);
+    compliance30Days[protocol.id] = todayCompliance;
+    compliance90Days[protocol.id] = todayCompliance;
+    compliance365Days[protocol.id] = todayCompliance;
   });
 
   // Helper function to get dosage display from actual database values

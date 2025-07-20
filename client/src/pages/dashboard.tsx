@@ -120,15 +120,16 @@ export default function Dashboard() {
 
   const activeProtocols = protocols.filter(p => p.isActive);
 
-  // Get compliance data for active protocols
-  const { data: protocolCompliance = {} } = useQuery<Record<number, number>>({
-    queryKey: ['/api/protocols/compliance', 30],
-    queryFn: async () => {
-      const response = await fetch('/api/protocols/compliance?days=30');
-      return response.json();
-    },
-    enabled: activeProtocols.length > 0,
-  });
+  // Calculate compliance client-side as fallback
+  const calculateCompliance = (protocol: any) => {
+    if (!todayTasks.length) return 0;
+    
+    const protocolTasks = todayTasks.filter(task => task.protocolId === protocol.id);
+    if (protocolTasks.length === 0) return 0;
+    
+    const completedTasks = protocolTasks.filter(task => task.completed);
+    return Math.round((completedTasks.length / protocolTasks.length) * 100);
+  };
 
   return (
     <div className="px-4 py-6 space-y-6">
@@ -205,7 +206,7 @@ export default function Dashboard() {
                     <div className="col-span-1">
                       <input
                         type="checkbox"
-                        checked={task.completed}
+                        checked={task.completed || false}
                         onChange={(e) => handleTaskToggle(task.id, e.target.checked)}
                         className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
                       />
@@ -256,9 +257,9 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-bold text-primary">
-                        {protocolCompliance[protocol.id] || 0}%
+                        {calculateCompliance(protocol)}%
                       </div>
-                      <div className="text-xs text-gray-600">L30D</div>
+                      <div className="text-xs text-gray-600">Today</div>
                     </div>
                   </div>
                 ))}
