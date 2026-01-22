@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Camera, TrendingUp, Calendar, ArrowRight } from "lucide-react";
+import { Plus, Camera, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
@@ -11,6 +11,8 @@ import ProtocolBuilder from "@/components/protocol-builder";
 import VoiceNoteProcessor from "@/components/voice-note-processor";
 import LabelScanner from "@/components/label-scanner";
 import ProgressChart from "@/components/progress-chart";
+import SleepTrends from "@/components/sleep-trends";
+import FourHorsemenCard from "@/components/four-horsemen-card";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
@@ -322,6 +324,12 @@ export default function Dashboard() {
           }}
         />
       )}
+
+      {/* 4 Horsemen Protection Summary */}
+      <FourHorsemenCard />
+
+      {/* Sleep Trends Visualization */}
+      <SleepTrends days={30} />
 
       {/* Weekly Progress Chart */}
       {dashboardData?.weeklyData && (
