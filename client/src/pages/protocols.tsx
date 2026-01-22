@@ -20,6 +20,13 @@ const categoryIcons = {
   nutrition: Utensils,
 };
 
+const categoryLabels: Record<string, string> = {
+  supplements: "Supps & Rx",
+  exercise: "Exercise & Behavior",
+  fasting: "TR & IF: Meal Window",
+  nutrition: "CR & DR: Calories & Diet",
+};
+
 export default function Protocols() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -152,7 +159,7 @@ export default function Protocols() {
     return matchesSearch && matchesCategory;
   });
 
-  const categories = [...new Set(protocols.map(p => p.category))];
+  const categories = Array.from(new Set(protocols.map(p => p.category)));
 
   const handleDeleteProtocol = (id: number) => {
     if (confirm("Are you sure you want to delete this protocol?")) {
@@ -243,7 +250,7 @@ export default function Protocols() {
                 className="whitespace-nowrap"
               >
                 {Icon && <Icon size={14} className="mr-1" />}
-                {category}
+                {categoryLabels[category] || category}
               </Button>
             );
           })}
@@ -262,10 +269,10 @@ export default function Protocols() {
           >
             <CardContent className="flex flex-col items-center space-y-2 p-4">
               <Icon className={selectedCategory === category ? "text-primary" : "text-gray-600"} size={24} />
-              <span className={`text-sm font-medium capitalize ${
+              <span className={`text-sm font-medium ${
                 selectedCategory === category ? "text-primary" : "text-gray-600"
               }`}>
-                {category}
+                {categoryLabels[category] || category}
               </span>
             </CardContent>
           </Card>
@@ -286,11 +293,11 @@ export default function Protocols() {
         </CardContent>
       </Card>
 
-      {/* Intake Protocols */}
+      {/* Protocols */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">Intake Protocols</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Protocols</h2>
         
-        {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'nutrition').length > 0 ? (
+        {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'exercise').length > 0 ? (
           <Card>
             <CardContent className="p-0">
               {/* Header Row */}
@@ -303,7 +310,7 @@ export default function Protocols() {
               </div>
               
               {/* Data Rows */}
-              {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'nutrition').map((protocol, index, arr) => (
+              {filteredProtocols.filter(p => p.category === 'supplements' || p.category === 'exercise').map((protocol, index, arr) => (
                 <div 
                   key={protocol.id} 
                   className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== arr.length - 1 ? 'border-b' : ''}`}
@@ -348,16 +355,16 @@ export default function Protocols() {
           </Card>
         ) : (
           <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">No intake protocols found</p>
+            <p className="text-sm">No protocols found</p>
           </div>
         )}
       </div>
 
-      {/* Physical Activity Protocols */}
+      {/* The 3 Levers */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800">Physical Activity</h2>
+        <h2 className="text-lg font-semibold text-slate-800">The 3 Levers</h2>
         
-        {filteredProtocols.filter(p => p.category === 'exercise' || p.category === 'fasting').length > 0 ? (
+        {filteredProtocols.filter(p => p.category === 'fasting' || p.category === 'nutrition').length > 0 ? (
           <Card>
             <CardContent className="p-0">
               {/* Header Row */}
@@ -370,7 +377,7 @@ export default function Protocols() {
               </div>
               
               {/* Data Rows */}
-              {filteredProtocols.filter(p => p.category === 'exercise' || p.category === 'fasting').map((protocol, index, arr) => (
+              {filteredProtocols.filter(p => p.category === 'fasting' || p.category === 'nutrition').map((protocol, index, arr) => (
                 <div 
                   key={protocol.id} 
                   className={`grid grid-cols-6 gap-3 p-3 items-center hover:bg-gray-50 cursor-pointer ${index !== arr.length - 1 ? 'border-b' : ''}`}
@@ -415,7 +422,7 @@ export default function Protocols() {
           </Card>
         ) : (
           <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">No physical activity protocols found</p>
+            <p className="text-sm">No meal window or nutrition protocols found</p>
           </div>
         )}
       </div>

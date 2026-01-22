@@ -18,6 +18,13 @@ const categoryIcons = {
   nutrition: Utensils,
 };
 
+const categoryLabels: Record<string, string> = {
+  supplements: "Supps & Rx",
+  exercise: "Exercise & Behavior",
+  fasting: "TR & IF: Meal Window",
+  nutrition: "CR & DR: Calories & Diet",
+};
+
 const categoryColors = {
   supplements: "bg-primary/10 text-primary",
   exercise: "bg-accent/10 text-accent",
@@ -54,7 +61,7 @@ export default function ProtocolCard({ protocol, compliance, onEdit, onDelete }:
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Badge variant="outline" className="text-xs">
-              {protocol.category}
+              {categoryLabels[protocol.category] || protocol.category}
             </Badge>
             {protocol.isActive && (
               <Badge variant="secondary" className="text-xs">

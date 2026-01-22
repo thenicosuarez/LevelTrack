@@ -10,11 +10,11 @@ export default function Header() {
   });
 
   return (
-    <header className="bg-white sticky top-0 z-50 border-b border-gray-200 px-4 py-4">
+    <header className="bg-card sticky top-0 z-50 border-b border-border px-4 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
-            <FlaskConical className="text-white" size={16} />
+          <div className="w-8 h-8 gradient-outlive rounded-lg flex items-center justify-center shadow-sm">
+            <FlaskConical className="text-primary" size={16} />
           </div>
           <h1 className="text-lg font-semibold text-slate-800">Nurtur Stack</h1>
         </div>
@@ -25,7 +25,7 @@ export default function Header() {
           </Button>
           
           <Avatar className="w-8 h-8">
-            <AvatarImage src={user?.avatar} alt={user?.name} />
+            <AvatarImage src={user?.avatar || undefined} alt={user?.name} />
             <AvatarFallback>
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </AvatarFallback>

@@ -145,10 +145,10 @@ export default function Analytics() {
           <h3 className="text-lg font-semibold text-slate-800 mb-4">Category Performance</h3>
           <div className="space-y-3">
             {[
-              { category: "Supplements", compliance: 94, color: "bg-primary" },
-              { category: "Exercise", compliance: 87, color: "bg-accent" },
-              { category: "Sleep", compliance: 89, color: "bg-secondary" },
-              { category: "Nutrition", compliance: 92, color: "bg-success" },
+              { category: "Supps & Rx", compliance: 94, color: "bg-primary" },
+              { category: "Exercise & Behavior", compliance: 87, color: "bg-accent" },
+              { category: "TR & IF: Meal Window", compliance: 89, color: "bg-secondary" },
+              { category: "CR & DR: Calories & Diet", compliance: 92, color: "bg-success" },
             ].map((item, index) => (
               <div key={index} className="space-y-2">
                 <div className="flex justify-between items-center">
