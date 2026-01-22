@@ -35,7 +35,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes: Latest modifications with dates
 
-### January 22, 2026 - Outlive Rebranding
+### January 22, 2026 - Outlive Rebranding & Dashboard Enhancements
 - **Renamed protocol categories** - Updated to Peter Attia framework:
   - Supplements → "Supps & Rx"
   - Exercise → "Exercise & Behavior"
@@ -45,6 +45,16 @@ Preferred communication style: Simple, everyday language.
 - **Updated color palette** - Warm sage green primary, cream backgrounds, muted gold accents (inspired by Outlive book cover)
 - **Added gradient utilities** - gradient-outlive and gradient-hero for aurora-style effects
 - **Modernized design** - Warmer, functional medicine aesthetic with soft shadows and rounded corners
+- **Added 4 Horsemen Summary Card** - Dashboard now shows protection scores against the 4 major disease drivers:
+  - Metabolic Syndrome (tracked via CR/DR/TR protocols)
+  - Cardiovascular Disease (tracked via Exercise & Nutrition)
+  - Cancer (tracked via all metabolic protocols)
+  - Neurocognitive Decline (tracked via Exercise & Supplements)
+- **Added Sleep Trends Visualization** - 30-day historical bar chart with:
+  - Average, best, and lowest sleep metrics
+  - Week-over-week trend indicator
+  - Color-coded bars (green for 7+ hours, amber for less)
+  - Peter Attia's 7-9 hour target recommendation
 
 ### January 17, 2025 - Protocol Compliance Tracking
 - Fixed compliance percentage fluctuation with real calculations
