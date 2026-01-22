@@ -20,10 +20,10 @@ interface ProtocolBuilderProps {
 }
 
 const categories = [
-  { id: "supplements", label: "Supplements", icon: Shield, group: "intake" },
-  { id: "nutrition", label: "Nutrition", icon: Utensils, group: "intake" },
-  { id: "exercise", label: "Exercise", icon: Dumbbell, group: "physical" },
-  { id: "fasting", label: "Fasting", icon: Clock, group: "physical" },
+  { id: "supplements", label: "Supps & Rx", icon: Shield, group: "protocols" },
+  { id: "exercise", label: "Exercise & Behavior", icon: Dumbbell, group: "protocols" },
+  { id: "fasting", label: "TR & IF: Meal Window", icon: Clock, group: "levers" },
+  { id: "nutrition", label: "CR & DR: Calories & Diet", icon: Utensils, group: "levers" },
 ];
 
 const goals = [
@@ -529,9 +529,9 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           {/* Category Selection with Groups */}
           <div className="space-y-3">
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Intake Protocols</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Protocols</h4>
               <div className="grid grid-cols-2 gap-3">
-                {categories.filter(c => c.group === "intake").map(({ id, label, icon: Icon }) => (
+                {categories.filter(c => c.group === "protocols").map(({ id, label, icon: Icon }) => (
                   <Card 
                     key={id} 
                     className={`cursor-pointer transition-all ${
@@ -558,9 +558,9 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
               </div>
             </div>
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Physical Activity</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">The 3 Levers</h4>
               <div className="grid grid-cols-2 gap-3">
-                {categories.filter(c => c.group === "physical").map(({ id, label, icon: Icon }) => (
+                {categories.filter(c => c.group === "levers").map(({ id, label, icon: Icon }) => (
                   <Card 
                     key={id} 
                     className={`cursor-pointer transition-all ${
