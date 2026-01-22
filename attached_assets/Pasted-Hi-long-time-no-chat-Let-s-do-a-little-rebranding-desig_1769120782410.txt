@@ -1,0 +1,54 @@
+Hi long time no chat. Let's do a little rebranding design and product mgmt work.
+
+High level - I want this to help mirror + track everything Peter Attia has said in his book. See attached for context and below on nutrition.
+
+Change name of Exercise protocols to exercise & behavioral protocols.
+
+Change Fasting to TR & IF: Meal Window. This is a strategic change to incorporate with the Peter Attia stuff.
+
+And rename Nutrition to CR & DR: Calories & Diet
+
+Some notes on how I want to be able to track nutriotion according to Peter Attia's framework:
+
+Breaking dietary modifications into 3 “levers” we can pull. These are:
+
+CR – Calorie Restriction
+TR – Time Restricted Eating (often referred to as intermittent fasting)
+DR – Dietary Restriction
+
+Peter says that in order to avoid eating the standard American diet, you want to be pulling at least one of these levers at all times.
+
+For most people that’ll typically be dietary restriction; avoiding sugary foods, processed carbohydrates and trans fats.
+
+However, ideally you want to be pulling at least two of these levers. Peter says he lives most his life like this, doing the following:
+
+Restricting how often he eats, typically eating his first meal in the afternoon (intermittent fasting)
+Restricting what he eats; currently he doesn’t eat sugary foods, and he doesn’t eat processed carbohydrates
+Occasionally, you want to pull all 3 of these levers.
+
+Pulling all 3 levers means doing an extended fast.
+
+So let’s recap; you want to be thinking about:
+
+What you’re eating (DR)
+When you’re eating (TR)
+How much you’re eating (CR)
+
+Some design element ideas:
+
+Color Palette
+Role	Color	Usage
+Primary	Warm coral/terracotta	Headlines, CTAs, accents
+Secondary	Soft cream/ivory	Backgrounds, cards
+Neutral	Warm gray	Body text, subtle elements
+Accent	Muted gold/amber	Highlights, data viz
+Typography
+Headlines: Rounded sans-serif (approachable yet professional)
+Body: Clean sans-serif with generous line height
+Data/Metrics: Medium weight for emphasis
+Visual Elements
+Soft gradients and rounded corners
+Warm photography with natural lighting
+Subtle shadows for depth
+Organic shapes as decorative elements
+Generous white space for breathing room
