@@ -1,28 +1,41 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Brain, Activity, Flame, Shield, Info } from "lucide-react";
+import { Heart, Brain, Activity, Flame, Shield, Info, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Protocol, Task } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
+import { useLocation } from "wouter";
+import type { Protocol } from "@shared/schema";
+
+interface ExtendedProtocol extends Protocol {
+  horsemenTags?: string[];
+  windowMode?: string;
+}
 
 interface HorsemanData {
+  id: string;
   name: string;
+  fullName: string;
   icon: typeof Heart;
   color: string;
   bgColor: string;
   description: string;
-  protocolCategories: string[];
   protectionScore: number;
+  linkedProtocols: ExtendedProtocol[];
 }
 
-const horsemanMappings: Record<string, string[]> = {
-  "Metabolic Syndrome": ["fasting", "nutrition"],
-  "Cardiovascular Disease": ["exercise", "nutrition"],
-  "Cancer": ["supplements", "nutrition", "exercise", "fasting"],
-  "Neurocognitive Decline": ["exercise", "supplements"],
+const categoryLabels: Record<string, string> = {
+  supplements: "Supps & Rx",
+  exercise: "Exercise & Behavior",
+  fasting: "TR & IF: Meal Window",
+  nutrition: "CR & DR: Calories & Diet",
 };
 
 export default function FourHorsemenCard() {
-  const { data: protocols = [] } = useQuery<Protocol[]>({
+  const [, setLocation] = useLocation();
+  const [expandedHorseman, setExpandedHorseman] = useState<string | null>(null);
+
+  const { data: protocols = [] } = useQuery<ExtendedProtocol[]>({
     queryKey: ['/api/protocols'],
   });
 
@@ -30,16 +43,16 @@ export default function FourHorsemenCard() {
     queryKey: ['/api/protocols/compliance', 30],
   });
 
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
   const activeProtocols = protocols.filter(p => p.isActive);
 
-  const calculateHorsemanScore = (categories: string[]): number => {
-    const relevantProtocols = activeProtocols.filter(p => 
-      categories.includes(p.category)
+  const getLinkedProtocols = (horsemanId: string): ExtendedProtocol[] => {
+    return activeProtocols.filter(p => 
+      (p.horsemenTags || []).includes(horsemanId)
     );
+  };
+
+  const calculateHorsemanScore = (horsemanId: string): number => {
+    const relevantProtocols = getLinkedProtocols(horsemanId);
     
     if (relevantProtocols.length === 0) return 0;
     
@@ -53,40 +66,48 @@ export default function FourHorsemenCard() {
 
   const horsemen: HorsemanData[] = [
     {
+      id: "metabolic",
       name: "Metabolic",
+      fullName: "Metabolic Syndrome",
       icon: Flame,
       color: "text-orange-600",
       bgColor: "bg-orange-100",
-      description: "Metabolic Syndrome - Addressed by CR, DR & TR protocols",
-      protocolCategories: horsemanMappings["Metabolic Syndrome"],
-      protectionScore: calculateHorsemanScore(horsemanMappings["Metabolic Syndrome"]),
+      description: "Type 2 diabetes, obesity, insulin resistance",
+      protectionScore: calculateHorsemanScore("metabolic"),
+      linkedProtocols: getLinkedProtocols("metabolic"),
     },
     {
+      id: "cardiovascular",
       name: "Cardio",
+      fullName: "Cardiovascular Disease",
       icon: Heart,
       color: "text-red-600",
       bgColor: "bg-red-100",
-      description: "Cardiovascular Disease - Addressed by Exercise & Nutrition",
-      protocolCategories: horsemanMappings["Cardiovascular Disease"],
-      protectionScore: calculateHorsemanScore(horsemanMappings["Cardiovascular Disease"]),
+      description: "Heart disease, stroke, atherosclerosis",
+      protectionScore: calculateHorsemanScore("cardiovascular"),
+      linkedProtocols: getLinkedProtocols("cardiovascular"),
     },
     {
+      id: "cancer",
       name: "Cancer",
+      fullName: "Cancer Prevention",
       icon: Shield,
       color: "text-purple-600",
       bgColor: "bg-purple-100",
-      description: "Cancer Prevention - Addressed by all metabolic protocols",
-      protocolCategories: horsemanMappings["Cancer"],
-      protectionScore: calculateHorsemanScore(horsemanMappings["Cancer"]),
+      description: "Reduce cancer risk through metabolic health",
+      protectionScore: calculateHorsemanScore("cancer"),
+      linkedProtocols: getLinkedProtocols("cancer"),
     },
     {
+      id: "neurocognitive",
       name: "Neuro",
+      fullName: "Neurocognitive Decline",
       icon: Brain,
       color: "text-blue-600",
       bgColor: "bg-blue-100",
-      description: "Neurocognitive Decline - Addressed by Exercise & Supplements",
-      protocolCategories: horsemanMappings["Neurocognitive Decline"],
-      protectionScore: calculateHorsemanScore(horsemanMappings["Neurocognitive Decline"]),
+      description: "Alzheimer's, dementia, cognitive function",
+      protectionScore: calculateHorsemanScore("neurocognitive"),
+      linkedProtocols: getLinkedProtocols("neurocognitive"),
     },
   ];
 
@@ -109,6 +130,10 @@ export default function FourHorsemenCard() {
     return "None";
   };
 
+  const toggleExpanded = (horsemanId: string) => {
+    setExpandedHorseman(expandedHorseman === horsemanId ? null : horsemanId);
+  };
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-6">
@@ -129,8 +154,8 @@ export default function FourHorsemenCard() {
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <p className="text-sm">
-                  Based on Peter Attia's "Outlive" framework. These are the 4 major diseases 
-                  that account for most chronic illness. Your protocols help protect against them.
+                  Based on Peter Attia's "Outlive" framework. Tag your protocols with 
+                  which diseases they help prevent to track your protection.
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -146,73 +171,109 @@ export default function FourHorsemenCard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
           {horsemen.map((horseman) => {
             const Icon = horseman.icon;
-            const relevantProtocolCount = activeProtocols.filter(p => 
-              horseman.protocolCategories.includes(p.category)
-            ).length;
+            const isExpanded = expandedHorseman === horseman.id;
+            const hasProtocols = horseman.linkedProtocols.length > 0;
             
             return (
-              <TooltipProvider key={horseman.name}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className={`w-8 h-8 ${horseman.bgColor} rounded-lg flex items-center justify-center`}>
-                          <Icon className={horseman.color} size={16} />
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-slate-800">{horseman.name}</div>
-                          <div className="text-xs text-gray-500">{relevantProtocolCount} protocols</div>
-                        </div>
+              <div key={horseman.id} className="rounded-xl overflow-hidden border border-gray-100">
+                <div 
+                  className={`p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer ${
+                    isExpanded ? 'bg-gray-100' : ''
+                  }`}
+                  onClick={() => toggleExpanded(horseman.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 ${horseman.bgColor} rounded-lg flex items-center justify-center`}>
+                        <Icon className={horseman.color} size={20} />
                       </div>
-                      
-                      <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div 
-                          className={`absolute top-0 left-0 h-full rounded-full transition-all ${
-                            horseman.protectionScore >= 80 ? 'bg-green-500' :
-                            horseman.protectionScore >= 60 ? 'bg-primary' :
-                            horseman.protectionScore >= 40 ? 'bg-amber-500' :
-                            'bg-red-500'
-                          }`}
-                          style={{ width: `${horseman.protectionScore}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className={`text-xs font-medium ${getScoreColor(horseman.protectionScore)}`}>
-                          {horseman.protectionScore}%
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {getScoreLabel(horseman.protectionScore)}
-                        </span>
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">{horseman.fullName}</div>
+                        <div className="text-xs text-gray-500">
+                          {horseman.linkedProtocols.length} protocol{horseman.linkedProtocols.length !== 1 ? 's' : ''} linked
+                        </div>
                       </div>
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="text-sm font-medium mb-1">{horseman.description}</p>
-                    <p className="text-xs text-gray-400">
-                      Categories: {horseman.protocolCategories.map(c => {
-                        const labels: Record<string, string> = {
-                          supplements: "Supps & Rx",
-                          exercise: "Exercise & Behavior",
-                          fasting: "TR & IF: Meal Window",
-                          nutrition: "CR & DR: Calories & Diet",
-                        };
-                        return labels[c] || c;
-                      }).join(", ")}
+                    <div className="flex items-center space-x-3">
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${getScoreColor(horseman.protectionScore)}`}>
+                          {horseman.protectionScore}%
+                        </div>
+                        <div className="text-xs text-gray-400">{getScoreLabel(horseman.protectionScore)}</div>
+                      </div>
+                      {hasProtocols ? (
+                        isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />
+                      ) : null}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-2">
+                    <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`absolute top-0 left-0 h-full rounded-full transition-all ${
+                          horseman.protectionScore >= 80 ? 'bg-green-500' :
+                          horseman.protectionScore >= 60 ? 'bg-primary' :
+                          horseman.protectionScore >= 40 ? 'bg-amber-500' :
+                          horseman.protectionScore > 0 ? 'bg-red-500' : 'bg-gray-300'
+                        }`}
+                        style={{ width: `${Math.max(horseman.protectionScore, 2)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {isExpanded && hasProtocols && (
+                  <div className="bg-white border-t border-gray-100 p-3 space-y-2">
+                    <div className="text-xs text-gray-500 mb-2">Linked Protocols:</div>
+                    {horseman.linkedProtocols.map((protocol) => (
+                      <div 
+                        key={protocol.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLocation('/protocols');
+                        }}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                          <span className="text-sm font-medium text-slate-700">{protocol.name}</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {categoryLabels[protocol.category] || protocol.category}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isExpanded && !hasProtocols && (
+                  <div className="bg-white border-t border-gray-100 p-4 text-center">
+                    <p className="text-sm text-gray-500 mb-2">
+                      No protocols tagged for {horseman.fullName} yet
                     </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLocation('/protocols');
+                      }}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Tag a protocol →
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
         <div className="mt-4 p-3 bg-primary/5 rounded-lg">
           <div className="text-xs text-primary">
-            <span className="font-medium">Outlive Insight:</span> Complete your daily protocols 
-            to build consistent protection against the 4 Horsemen.
+            <span className="font-medium">Tip:</span> Tag your protocols with disease categories 
+            when creating them to see your protection levels here.
           </div>
         </div>
       </CardContent>

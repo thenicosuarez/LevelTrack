@@ -37,6 +37,13 @@ const goals = [
   "Weight Management",
 ];
 
+const horsemen = [
+  { id: "metabolic", label: "Metabolic Syndrome", description: "Type 2 diabetes, obesity, insulin resistance" },
+  { id: "cardiovascular", label: "Cardiovascular Disease", description: "Heart disease, stroke, atherosclerosis" },
+  { id: "cancer", label: "Cancer Prevention", description: "Reduce cancer risk through metabolic health" },
+  { id: "neurocognitive", label: "Neurocognitive Decline", description: "Alzheimer's, dementia, cognitive function" },
+];
+
 interface ProtocolItemForm {
   name: string;
   
@@ -80,6 +87,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   const [protocolName, setProtocolName] = useState("");
   const [protocolDescription, setProtocolDescription] = useState("");
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [selectedHorsemen, setSelectedHorsemen] = useState<string[]>([]);
+  const [windowMode, setWindowMode] = useState<"fasting" | "eating">("fasting");
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const getDefaultProtocolItem = (): ProtocolItemForm => ({
     name: "",
@@ -117,6 +126,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       setProtocolDescription(editingProtocol.description || "");
       setSelectedCategory(editingProtocol.category);
       setSelectedGoals(editingProtocol.goals || []);
+      setSelectedHorsemen((editingProtocol as any).horsemenTags || []);
+      setWindowMode(((editingProtocol as any).windowMode as "fasting" | "eating") || "fasting");
       setStartDate(editingProtocol.startDate || new Date().toISOString().split('T')[0]);
       
       // Load protocol items
@@ -162,6 +173,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       setProtocolDescription("");
       setSelectedCategory("supplements");
       setSelectedGoals([]);
+      setSelectedHorsemen([]);
+      setWindowMode("fasting");
       setProtocolItems([getDefaultProtocolItem()]);
     }
   }, [editingProtocol, open]);
@@ -399,6 +412,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
             description: protocolDescription,
             category: selectedCategory,
             goals: selectedGoals,
+            horsemenTags: selectedHorsemen,
+            windowMode: windowMode,
             color: "#14B8A6",
             startDate: startDate,
           }
@@ -440,6 +455,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           description: protocolDescription,
           category: selectedCategory,
           goals: selectedGoals,
+          horsemenTags: selectedHorsemen,
+          windowMode: windowMode,
           isActive: true,
           color: "#14B8A6",
           startDate: startDate,
@@ -486,6 +503,8 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     setProtocolName("");
     setProtocolDescription("");
     setSelectedGoals([]);
+    setSelectedHorsemen([]);
+    setWindowMode("fasting");
     setProtocolItems([
       getDefaultProtocolItem()
     ]);
@@ -512,6 +531,14 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       prev.includes(goal) 
         ? prev.filter(g => g !== goal)
         : [...prev, goal]
+    );
+  };
+
+  const toggleHorseman = (horseman: string) => {
+    setSelectedHorsemen(prev => 
+      prev.includes(horseman) 
+        ? prev.filter(h => h !== horseman)
+        : [...prev, horseman]
     );
   };
 
@@ -627,12 +654,45 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           {/* Protocol Items - Category Specific */}
           {selectedCategory === "fasting" ? (
             <div className="space-y-3">
-              <Label>Fasting Schedule</Label>
+              <div className="flex items-center justify-between">
+                <Label>Time-Restricted Schedule</Label>
+                <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setWindowMode("fasting")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      windowMode === "fasting" 
+                        ? "bg-white text-primary shadow-sm" 
+                        : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    Fasting Window
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWindowMode("eating")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      windowMode === "eating" 
+                        ? "bg-white text-primary shadow-sm" 
+                        : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    Eating Window
+                  </button>
+                </div>
+              </div>
               <Card className="p-4">
                 <div className="space-y-3">
+                  <p className="text-xs text-gray-500 mb-2">
+                    {windowMode === "fasting" 
+                      ? "Set when your fasting period starts and ends"
+                      : "Set when your eating window opens and closes"}
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label htmlFor="fast-start-time" className="text-xs">Start Time</Label>
+                      <Label htmlFor="fast-start-time" className="text-xs">
+                        {windowMode === "fasting" ? "Fast Starts" : "Eating Window Opens"}
+                      </Label>
                       <Input
                         id="fast-start-time"
                         type="time"
@@ -659,7 +719,9 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                   
                   {protocolItems[0]?.fastingType === "goal" && (
                     <div>
-                      <Label htmlFor="fast-end-time" className="text-xs">End Time</Label>
+                      <Label htmlFor="fast-end-time" className="text-xs">
+                        {windowMode === "fasting" ? "Fast Ends" : "Eating Window Closes"}
+                      </Label>
                       <Input
                         id="fast-end-time"
                         type="time"
@@ -996,6 +1058,42 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
                     onCheckedChange={() => toggleGoal(goal)}
                   />
                   <Label htmlFor={goal} className="text-sm">{goal}</Label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 4 Horsemen - Disease Prevention Tags */}
+          <div>
+            <Label className="flex items-center space-x-2">
+              <span>The 4 Horsemen</span>
+              <span className="text-xs text-gray-500 font-normal">(Protect against)</span>
+            </Label>
+            <p className="text-xs text-gray-500 mb-2">
+              Tag which major disease drivers this protocol helps prevent
+            </p>
+            <div className="grid grid-cols-1 gap-2 mt-2">
+              {horsemen.map((horseman) => (
+                <div 
+                  key={horseman.id} 
+                  className={`flex items-start space-x-2 p-2 rounded-lg border transition-colors ${
+                    selectedHorsemen.includes(horseman.id) 
+                      ? "border-primary bg-primary/5" 
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <Checkbox
+                    id={horseman.id}
+                    checked={selectedHorsemen.includes(horseman.id)}
+                    onCheckedChange={() => toggleHorseman(horseman.id)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor={horseman.id} className="text-sm font-medium cursor-pointer">
+                      {horseman.label}
+                    </Label>
+                    <p className="text-xs text-gray-500">{horseman.description}</p>
+                  </div>
                 </div>
               ))}
             </div>
