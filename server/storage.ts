@@ -1,6 +1,6 @@
 import { 
   users, protocols, protocolItems, tasks, healthMetrics, integrations, voiceNotes,
-  glp1Logs, sideEffectLogs, progressPhotos,
+  glp1Logs, sideEffectLogs, progressPhotos, pushSubscriptions,
   type User, type InsertUser, type Protocol, type InsertProtocol,
   type ProtocolItem, type InsertProtocolItem, type Task, type InsertTask,
   type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration,
@@ -8,6 +8,7 @@ import {
   type Glp1Log, type InsertGlp1Log,
   type SideEffectLog, type InsertSideEffectLog,
   type ProgressPhoto, type InsertProgressPhoto,
+  type PushSubscription, type InsertPushSubscription,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
@@ -77,6 +78,12 @@ export interface IStorage {
   getProgressPhoto(id: number): Promise<ProgressPhoto | undefined>;
   createProgressPhoto(photo: InsertProgressPhoto): Promise<ProgressPhoto>;
   deleteProgressPhoto(id: number): Promise<void>;
+
+  // Push Subscriptions
+  getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
+  upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
+  deletePushSubscription(endpoint: string): Promise<void>;
+  getAllPushSubscriptions(): Promise<PushSubscription[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -365,6 +372,33 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProgressPhoto(id: number): Promise<void> {
     await db.delete(progressPhotos).where(eq(progressPhotos.id, id));
+  }
+
+  // Push Subscriptions
+  async getPushSubscriptions(userId: number): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription> {
+    const existing = await db.select().from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, sub.endpoint));
+    if (existing.length > 0) {
+      const [updated] = await db.update(pushSubscriptions)
+        .set({ p256dh: sub.p256dh, auth: sub.auth })
+        .where(eq(pushSubscriptions.endpoint, sub.endpoint))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(pushSubscriptions).values(sub).returning();
+    return created;
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getAllPushSubscriptions(): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions);
   }
 }
 

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle } from "lucide-react";
+import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
@@ -10,6 +10,7 @@ import { formatWeight, convertWeight } from "@/lib/weight-utils";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
+import OnboardingWizard from "@/components/onboarding-wizard";
 
 interface DashboardData {
   todayCompliance: number;
@@ -32,6 +33,8 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const today = formatDate(new Date());
 
   const { data: user } = useQuery<User>({ queryKey: ['/api/user'] });
@@ -91,6 +94,20 @@ export default function Dashboard() {
     },
   });
 
+  const { data: injectionDayData } = useQuery<{ isInjectionDay: boolean }>({
+    queryKey: ["/api/push/is-injection-day"],
+  });
+
+  // Show onboarding if not completed
+  useEffect(() => {
+    if (!onboardingChecked && user !== undefined) {
+      setOnboardingChecked(true);
+      if (!user?.hasCompletedOnboarding) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [user, onboardingChecked]);
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -99,9 +116,39 @@ export default function Dashboard() {
   };
 
   const weightUnit = user?.weightUnit ?? "lbs";
+  const isInjectionDay = injectionDayData?.isInjectionDay ?? false;
 
   return (
+    <>
+    {showOnboarding && (
+      <OnboardingWizard
+        onComplete={() => {
+          setShowOnboarding(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+        }}
+      />
+    )}
     <div className="px-4 py-5 space-y-5">
+
+      {/* Injection day banner — shown when push isn't available or not subscribed */}
+      {isInjectionDay && !dashboardData?.todayShotLogged && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <Bell size={18} className="text-amber-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Shot day reminder</p>
+            <p className="text-xs text-amber-600">
+              Today is your {user?.glp1InjectionDay} injection day{user?.glp1Drug ? ` — ${user.glp1Drug}` : ""}.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-xs h-8 px-3 shrink-0"
+            onClick={() => setLocation("/log-shot")}
+          >
+            Log Shot
+          </Button>
+        </div>
+      )}
 
       {/* Hero Card */}
       <div className="gradient-primary rounded-2xl p-5 text-white shadow-lg">
@@ -274,5 +321,6 @@ export default function Dashboard() {
       </div>
 
     </div>
+    </>
   );
 }

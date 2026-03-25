@@ -16,10 +16,19 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useState } from "react";
-import { Syringe, Target, Info, Pencil, Check, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw } from "lucide-react";
 import type { User } from "@shared/schema";
 import { kgToLbs, convertWeight, lbsToKg } from "@/lib/weight-utils";
+import {
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+  getCurrentSubscription,
+  registerServiceWorker,
+} from "@/lib/push-notifications";
+import { Switch } from "@/components/ui/switch";
+import OnboardingWizard from "@/components/onboarding-wizard";
 
 const NONE = "__none__";
 const INJECTION_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -65,6 +74,11 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("09:00");
+  const [pushBusy, setPushBusy] = useState(false);
 
   const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
@@ -73,6 +87,21 @@ export default function Settings() {
   const { data: drugs = [] } = useQuery<{ name: string; category: string }[]>({
     queryKey: ["/api/drugs"],
   });
+
+  // Sync reminder state from user data
+  useEffect(() => {
+    if (user) {
+      setReminderEnabled(user.reminderEnabled ?? false);
+      setReminderTime(user.reminderTime ?? "09:00");
+    }
+  }, [user?.reminderEnabled, user?.reminderTime]);
+
+  // Check push subscription status on mount
+  useEffect(() => {
+    registerServiceWorker().then(() => {
+      getCurrentSubscription().then((sub) => setIsSubscribed(!!sub));
+    });
+  }, []);
 
   const storedWeightUnit = (user?.weightUnit as "lbs" | "kg") ?? "lbs";
   const displayGoalWeight = user?.goalWeight != null
@@ -138,6 +167,56 @@ export default function Settings() {
 
   const onSubmit = (data: SettingsFormValues) => {
     updateSettingsMutation.mutate(data);
+  };
+
+  const handleToggleReminder = async (enabled: boolean) => {
+    if (!isPushSupported()) {
+      toast({ title: "Not supported", description: "Push notifications are not supported in this browser.", variant: "destructive" });
+      return;
+    }
+    setPushBusy(true);
+    try {
+      if (enabled) {
+        const sub = await subscribeToPush();
+        if (!sub) {
+          toast({ title: "Permission denied", description: "Allow notifications to enable reminders.", variant: "destructive" });
+          setPushBusy(false);
+          return;
+        }
+        await apiRequest("POST", "/api/push/subscribe", {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: btoa(String.fromCharCode(...new Uint8Array(await sub.getKey("p256dh") as ArrayBuffer))),
+            auth: btoa(String.fromCharCode(...new Uint8Array(await sub.getKey("auth") as ArrayBuffer))),
+          },
+        });
+        setIsSubscribed(true);
+        await apiRequest("PATCH", "/api/user/settings", { reminderEnabled: true, reminderTime });
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+        setReminderEnabled(true);
+        toast({ title: "Reminders enabled", description: "You'll be notified on your injection days." });
+      } else {
+        const sub = await getCurrentSubscription();
+        if (sub) {
+          await apiRequest("DELETE", "/api/push/unsubscribe", { endpoint: sub.endpoint });
+          await unsubscribeFromPush();
+        }
+        setIsSubscribed(false);
+        await apiRequest("PATCH", "/api/user/settings", { reminderEnabled: false });
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+        setReminderEnabled(false);
+        toast({ title: "Reminders disabled" });
+      }
+    } catch {
+      toast({ title: "Something went wrong", variant: "destructive" });
+    }
+    setPushBusy(false);
+  };
+
+  const handleSaveReminderTime = async () => {
+    await apiRequest("PATCH", "/api/user/settings", { reminderTime });
+    queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    toast({ title: "Reminder time saved" });
   };
 
   const handleEditName = () => {
@@ -468,6 +547,85 @@ export default function Settings() {
         </form>
       </Form>
 
+      {/* Reminders Card */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center">
+              <Bell size={13} className="text-amber-500" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Reminders</span>
+          </div>
+          <Separator />
+          {!isPushSupported() ? (
+            <p className="text-xs text-muted-foreground">
+              Push notifications are not supported in this browser.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Shot-day reminders</p>
+                  <p className="text-xs text-muted-foreground">
+                    Get notified on your injection day
+                  </p>
+                </div>
+                <Switch
+                  checked={reminderEnabled}
+                  onCheckedChange={handleToggleReminder}
+                  disabled={pushBusy || !user?.glp1InjectionDay}
+                />
+              </div>
+              {!user?.glp1InjectionDay && (
+                <p className="text-xs text-amber-600">Set an injection day in the medication card first.</p>
+              )}
+              {reminderEnabled && (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">Reminder time</p>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-5 h-10 px-3"
+                    onClick={handleSaveReminderTime}
+                  >
+                    <Check size={14} />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Redo Setup */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 bg-muted rounded-lg flex items-center justify-center">
+              <RefreshCw size={13} className="text-muted-foreground" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Setup</span>
+          </div>
+          <Separator className="mb-3" />
+          <Button
+            variant="outline"
+            className="w-full h-10 text-sm"
+            onClick={() => setShowOnboarding(true)}
+          >
+            <RefreshCw size={14} className="mr-2" />
+            Redo onboarding wizard
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* About */}
       <Card>
         <CardContent className="p-5">
@@ -485,6 +643,15 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={() => {
+            setShowOnboarding(false);
+            queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+          }}
+        />
+      )}
     </div>
   );
 }

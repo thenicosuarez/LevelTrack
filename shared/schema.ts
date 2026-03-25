@@ -20,6 +20,10 @@ export const users = pgTable("users", {
   glp1StartDate: text("glp1_start_date"), // YYYY-MM-DD
   goalWeight: real("goal_weight"), // lbs
   weightUnit: text("weight_unit").default("lbs"), // lbs or kg
+  // Onboarding & reminders
+  hasCompletedOnboarding: boolean("has_completed_onboarding").default(false),
+  reminderEnabled: boolean("reminder_enabled").default(false),
+  reminderTime: text("reminder_time").default("09:00"), // HH:MM local time
 });
 
 export const protocols = pgTable("protocols", {
@@ -126,6 +130,17 @@ export const voiceNotes = pgTable("voice_notes", {
   processedAt: timestamp("processed_at"),
 });
 
+// ─── Push Subscriptions ────────────────────────────────────────────────────
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ─── LevelTrack GLP-1 Tables ───────────────────────────────────────────────
 
 export const glp1Logs = pgTable("glp1_logs", {
@@ -223,6 +238,11 @@ export const insertProgressPhotoSchema = createInsertSchema(progressPhotos).omit
   notes: z.string().optional(),
 });
 
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -254,3 +274,6 @@ export type InsertSideEffectLog = z.infer<typeof insertSideEffectLogSchema>;
 
 export type ProgressPhoto = typeof progressPhotos.$inferSelect;
 export type InsertProgressPhoto = z.infer<typeof insertProgressPhotoSchema>;
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;

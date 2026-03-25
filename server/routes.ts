@@ -3,11 +3,29 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
 import { z } from "zod";
+import webpush from "web-push";
 import { 
   insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
   insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema,
   insertGlp1LogSchema, insertSideEffectLogSchema, insertProgressPhotoSchema,
 } from "@shared/schema";
+
+// ─── VAPID setup ─────────────────────────────────────────────────────────────
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails("mailto:support@leveltrack.app", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+const DAY_ABBREVS: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+function isInjectionDayToday(injectionDay: string | null): boolean {
+  if (!injectionDay) return false;
+  const todayNum = new Date().getDay();
+  return DAY_ABBREVS[injectionDay] === todayNum;
+}
 
 const updateUserSettingsSchema = z.object({
   name: z.string().min(1).optional(),
@@ -19,6 +37,9 @@ const updateUserSettingsSchema = z.object({
   glp1StartDate: z.string().optional().nullable(),
   goalWeight: z.number().positive().optional().nullable(),
   weightUnit: z.enum(["lbs", "kg"]).optional(),
+  hasCompletedOnboarding: z.boolean().optional(),
+  reminderEnabled: z.boolean().optional(),
+  reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
 });
 
 // Curated GLP-1 and peptide drug list
@@ -620,6 +641,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete progress photo" });
+    }
+  });
+
+  // ─── Push Notifications ───────────────────────────────────────────────────
+  app.get("/api/push/vapid-public-key", (req, res) => {
+    if (!VAPID_PUBLIC_KEY) return res.status(503).json({ error: "Push notifications not configured" });
+    res.json({ key: VAPID_PUBLIC_KEY });
+  });
+
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ error: "Invalid subscription data" });
+      }
+      const sub = await storage.upsertPushSubscription({
+        userId: currentUserId,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      });
+      res.json({ success: true, id: sub.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save push subscription" });
+    }
+  });
+
+  app.delete("/api/push/unsubscribe", async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      if (!endpoint) return res.status(400).json({ error: "endpoint required" });
+      await storage.deletePushSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove subscription" });
+    }
+  });
+
+  app.post("/api/push/send-reminder", async (req, res) => {
+    try {
+      const user = await storage.getUser(currentUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.reminderEnabled) return res.json({ sent: false, reason: "reminders disabled" });
+      if (!isInjectionDayToday(user.glp1InjectionDay)) {
+        return res.json({ sent: false, reason: "not injection day" });
+      }
+
+      const subs = await storage.getPushSubscriptions(currentUserId);
+      if (subs.length === 0) return res.json({ sent: false, reason: "no subscriptions" });
+
+      const drugName = user.glp1Drug ?? "GLP-1";
+      const payload = JSON.stringify({
+        title: "LevelTrack Reminder",
+        body: `Time for your ${drugName} shot 💉`,
+        icon: "/icon-192.png",
+        url: "/log-shot",
+      });
+
+      const results = await Promise.allSettled(
+        subs.map((sub) =>
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          )
+        )
+      );
+      const sent = results.filter((r) => r.status === "fulfilled").length;
+      res.json({ sent, total: subs.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send reminder" });
+    }
+  });
+
+  // Check if today is an injection day for the current user (used for in-app banner)
+  app.get("/api/push/is-injection-day", async (req, res) => {
+    try {
+      const user = await storage.getUser(currentUserId);
+      if (!user) return res.json({ isInjectionDay: false });
+      res.json({ isInjectionDay: isInjectionDayToday(user.glp1InjectionDay) });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check injection day" });
     }
   });
 
