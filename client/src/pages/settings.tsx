@@ -19,7 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { Syringe, Target, Info, Pencil, Check, X } from "lucide-react";
 import type { User } from "@shared/schema";
-import { kgToLbs, convertWeight } from "@/lib/weight-utils";
+import { kgToLbs, convertWeight, lbsToKg } from "@/lib/weight-utils";
 
 const NONE = "__none__";
 const INJECTION_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -400,7 +400,20 @@ export default function Settings() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-xs text-muted-foreground">Weight Unit</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      value={field.value}
+                      onValueChange={(newUnit) => {
+                        const currentGoal = form.getValues("goalWeight");
+                        const parsed = parseFloat(currentGoal);
+                        if (!isNaN(parsed) && parsed > 0) {
+                          const converted = newUnit === "kg"
+                            ? Math.round(lbsToKg(parsed) * 10) / 10
+                            : Math.round(kgToLbs(parsed) * 10) / 10;
+                          form.setValue("goalWeight", String(converted));
+                        }
+                        field.onChange(newUnit);
+                      }}
+                    >
                       <FormControl>
                         <SelectTrigger className="h-10">
                           <SelectValue />
