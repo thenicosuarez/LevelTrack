@@ -33,18 +33,15 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and cross-origin requests
   if (request.method !== 'GET' || url.origin !== self.location.origin) {
     return;
   }
 
-  // API requests: network-first, no caching
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
     return;
   }
 
-  // Static assets: cache-first with network fallback
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -56,11 +53,48 @@ self.addEventListener('fetch', (event) => {
         return response;
       });
     }).catch(() => {
-      // Offline fallback: return cached index for navigation requests
       if (request.mode === 'navigate') {
         return caches.match('/') || new Response('Offline', { status: 503 });
       }
       return new Response('Offline', { status: 503 });
+    })
+  );
+});
+
+// Push: show notification when a push event is received
+self.addEventListener('push', (event) => {
+  let data = { title: 'LevelTrack', body: 'Time for your GLP-1 shot!', icon: '/icon.svg' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data.body = event.data.text();
+    }
+  }
+  const options = {
+    body: data.body,
+    icon: data.icon || '/icon.svg',
+    badge: '/icon.svg',
+    tag: 'shot-reminder',
+    renotify: true,
+    data: { url: data.url || '/' },
+  };
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+// Notification click: focus existing window or open new one
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
     })
   );
 });
