@@ -1,0 +1,262 @@
+5. Roadmap (V2+)
+Subsequent versions add differentiation layers:
+
+Integrations with Apple Health, Google Fit, and wearables to ingest weight, steps, heart rate, and other metrics.
+
+Lightweight food and macro tracking or integrations with existing nutrition apps, plus satiety‑oriented analytics for GLP‑1 users.
+
+Peptide‑specific workflows with protocol templates, cycle management, and on/off schedules.
+
+An experiment mode that lets users define hypotheses (e.g., lower dose plus added peptide) and automatically compare outcome windows.
+
+Clinician and coach views with shareable dashboards and potential B2B upsells.
+
+An AI coach layer that spots patterns in timing, dose, and side effects and surfaces simple, non‑prescriptive insights.
+
+6. Business Model
+LevelTrack follows a freemium model. The free tier includes core logging for GLP‑1s, peptides, and supplements, basic charts, reminders, and simple progress exports.
+
+A paid tier, targeted at roughly 24.99–39.99 dollars per year, unlocks:
+
+Advanced analytics and experiment mode
+
+Integrations (Apple Health/Google Fit, food apps, wearables)
+
+Export and coach sharing
+
+Premium protocol templates
+
+Future revenue layers include B2B subscriptions for clinicians and coaches and clearly disclosed affiliate revenue with labs, supplements, or programs. A realistic mid‑term goal is tens of thousands of monthly active users with a 15–20 percent conversion rate to the paid tier, yielding a few hundred thousand dollars of ARR with upside from B2B and affiliate channels.
+
+7. Go‑To‑Market Strategy
+Acquisition leans on creator partnerships and community distribution.
+
+Work directly with GLP‑1 and weight‑loss creators on TikTok, YouTube, and Instagram, giving them branded in‑app templates and affiliate tracking.
+
+Seed the app into Reddit and Facebook communities focused on GLP‑1 medications and metabolic health through high‑value, non‑spammy posts that share anonymized analytics and experiment results.
+
+Build SEO content around protocol guides, GLP‑1 plus peptide stack templates, and how‑to articles on tracking side effects and adherence.
+
+Inside the product, use shareable weekly reports and progress visuals to drive product‑led growth as users post their journeys publicly.
+
+8. Platform & Tech Approach
+To move quickly, the MVP will be built on a no‑code or low‑code platform rather than fully custom native code.
+
+Adalo is a strong choice for the first version because it allows rapid development of native iOS and Android apps, includes a built‑in database, and supports direct publishing to the app stores with relatively little engineering overhead.
+
+As traction grows, a parallel track in FlutterFlow, backed by Firebase or Supabase, can provide more sophisticated logic, better performance, and the option to export Flutter code for a later full‑custom implementation.
+
+Bubble is de‑emphasized for the core tracking app because it is web‑first and requires wrappers for mobile stores, but it can still be useful for internal web dashboards.
+
+9. Differentiation Strategy
+LevelTrack differentiates from existing GLP‑1 trackers on four axes: stack‑centric design, privacy, analytics depth, and creator readiness.
+
+Rather than focusing only on a single medication, the app is built around multi‑component protocols that combine medications, peptides, supplements, food, and device data. Privacy is a prominent feature, with clear non‑resale commitments, export options, and the possibility of an anonymized or low‑friction account mode, directly addressing community concerns.
+
+Analytics go beyond simple trend lines to support experiment‑style comparisons and multi‑variable views tailored to biohackers and coaches. Finally, the product bakes in tooling for creators—customizable progress cards, affiliate links, and lightweight dashboards—so that sharing success stories is effortless and aligned with growth.
+
+10. Risks & Mitigations
+Key risks include regulatory exposure, data security issues, platform limitations, and competitive response.
+
+Regulatory risk is managed by positioning the app as a tracking and journaling tool that does not provide medical advice or dosing instructions, along with clear disclaimers and, over time, selective partnerships with licensed providers. Data risk is reduced through encryption, minimal data collection, transparent policies, and routine security reviews.
+
+Platform risk is mitigated by planning early for a migration path from the initial no‑code stack to Flutter‑based code and by architecting data structures that can be moved to a more robust backend. CompetitiveThe download flow clearly isn’t working on your side, so I’ll give you the full business plan text here so you can paste it directly into Word/Google Docs.
+
+You can also reuse/modify any of this as your working spec as you build in Replit.
+
+LevelTrack Business Plan
+1. Overview & Thesis
+LevelTrack is a mobile app for people on GLP‑1 medications, peptides, and metabolic health stacks who want a single, privacy‑forward place to track injections, supplements, food, and key biometrics. It competes not just on basic shot tracking, but on breadth of tracking, quality of insight, and clear data policies, using viral social content as the primary growth engine.
+
+2. Market & Competition
+GLP‑1 tracking is now a distinct category, with apps like Shotsy, Pokii, MeAgain, Glapp, DoseDiary, and general health apps like Cronometer validated by tens of thousands of downloads and strong engagement among GLP‑1 users. These tools focus mainly on GLP‑1 shots and simple weight charts, leaving gaps in multi‑component protocol tracking, integrations, and experiment‑style analytics.
+
+Community feedback shows demand for a single app that “does it all” (meds, weight, side effects), frustration with paywalled basic charts, and concern about resale of sensitive health data. This creates an opportunity for a stack‑centric, privacy‑forward alternative that still feels as polished and shareable as the category leader.
+
+3. Product Vision
+Vision: Become the central nervous system for metabolic protocols, where users define and run “stacks” that combine GLP‑1s, peptides, supplements, food targets, and device data. The product competes by offering:
+
+Broader tracking coverage across meds, supplements, and lifestyle.
+
+Experiment‑style analysis that helps users see causal relationships (e.g., dose changes vs. side effects vs. weight trends).
+
+Privacy‑forward defaults and messaging to earn trust.
+
+Built‑in tools to turn progress data into social content that fuels viral growth.
+
+4. MVP Feature Set (V1)
+V1 focuses on quickly getting a cross‑platform mobile app to market with a differentiated but achievable scope:
+
+GLP‑1 and peptide shot logging
+
+Track drug, dose, formulation, timing, injection site, and optional pain or symptom scores.
+
+Supplement stack tracking
+
+Users define daily/weekly schedules (e.g., berberine, creatine, vitamins) and mark adherence.
+
+Weight and measurements
+
+Weight and basic body measurements with simple trend charts and optional private photos.
+
+Side‑effect and symptom journaling
+
+Log GI symptoms, mood, sleep, cravings, and energy so they can be correlated against dosing and habits.
+
+Reminders and schedules
+
+Smart notifications for injections, peptides, and key supplements.
+
+Simple analytics
+
+Weight vs. dose over time, adherence scores, and basic correlations (e.g., “weeks with ≥90% adherence lost 40% more weight than low‑adherence weeks”).
+
+Templated progress cards for social
+
+Swipeable “progress cards” users can export as images or clips for TikTok, Reels, and stories, similar in spirit to Shotsy’s social‑ready charts but with your own visual language.
+
+5. Roadmap (V2+)
+Subsequent versions add deeper differentiation:
+
+Integrations
+
+Apple Health, Google Fit, and wearables to ingest weight, steps, heart rate, and sleep.
+
+Optional integration with nutrition apps for calories/macros.
+
+Food and macro tracking
+
+Lightweight in‑app food logging or API‑based integrations, plus “satiety‑oriented” analytics for GLP‑1 users (e.g., average calories before vs. after starting).
+
+Peptide‑specific workflows
+
+Protocol templates for common peptides (BPC‑157, TB‑500, CJC‑1295, etc.), including cycle management and on/off schedules.
+
+Experiment mode
+
+Users define hypotheses (e.g., “lower dose + add peptide X”), choose metrics to track, and the app automatically compares before/after windows.
+
+Clinician and coach views
+
+Read‑only dashboards and simple cohort views that can be shared with providers; this becomes a future B2B revenue stream.
+
+AI coach layer
+
+Pattern detection in timing, dose, and side effects with simple, non‑prescriptive insights (e.g., “You consistently feel worse when you inject after 9pm.”).
+
+6. Business Model
+LevelTrack follows a freemium model:
+
+Free tier
+
+Core logging for GLP‑1s, peptides, and supplements.
+
+Basic charts and trends for weight and adherence.
+
+Reminders and simple progress exports.
+
+Paid tier (target $24.99–$39.99/year)
+
+Advanced analytics and experiment mode.
+
+Health and wearable integrations.
+
+Export and coach sharing.
+
+Advanced protocol templates and experiment presets.
+
+Future revenue layers:
+
+B2B subscriptions for clinicians and coaches using shared dashboards.
+
+Affiliate revenue from labs, supplements, or programs, with clear disclosures and opt‑in flows.
+
+Using Shotsy’s user traction and funding as external validation, a realistic mid‑term goal is tens of thousands of monthly active users with a 15–20% conversion rate to the paid tier, yielding a few hundred thousand dollars of ARR plus B2B and affiliate upside.
+
+7. Go‑To‑Market Strategy
+Acquisition leans on creator partnerships and GLP‑1 communities:
+
+Creator partnerships
+
+Work with GLP‑1 and weight‑loss creators on TikTok, YouTube, and Instagram, giving them branded in‑app templates and affiliate tracking so they can share progress visuals easily.
+
+Communities (Reddit, Facebook, Discord)
+
+Seed the app in GLP‑1 forums by sharing useful analytics, experiment summaries, and templates—never just promo links.
+
+SEO content
+
+Publish protocol guides (“GLP‑1 + peptide stack templates”), troubleshooting content (“how to track side effects”), and explainers (“why generic fitness apps fail GLP‑1 users”).
+
+Product‑led growth
+
+Within the app, weekly summary emails/notifications and attractive shareable reports drive organic sharing and word‑of‑mouth.
+
+8. Platform & Tech Approach
+To move quickly, the MVP is built on a no‑code or low‑code stack rather than fully custom native code:
+
+Adalo for V1
+
+Rapid development of native iOS and Android apps, integrated database, and direct App Store / Google Play publishing with minimal engineering overhead.
+
+FlutterFlow for scale
+
+As traction grows, a parallel implementation in FlutterFlow backed by Firebase/Supabase gives more sophisticated logic, better performance, and the option to export Flutter code for a future full‑custom build.
+
+Bubble for internal tools
+
+De‑prioritized for the core tracking app (web‑first and wrapper‑based for mobile) but potentially used for internal dashboards and admin tools.
+
+9. Differentiation Strategy
+LevelTrack differentiates from existing GLP‑1 trackers on four axes:
+
+Stack‑centric design
+
+Built around multi‑component protocols that combine meds, peptides, supplements, food, and device data instead of just tracking injections.
+
+Privacy-forward positioning
+
+Clear non‑resale commitments, minimal data collection, export options, and possibly an anonymized or low‑friction account mode to address community concerns.
+
+Analytics depth and experiments
+
+Beyond simple trend lines, support experiment‑style comparisons and multi‑variable views tailored to power users and coaches.
+
+Creator‑ready tooling
+
+Customizable progress cards, affiliate links, and lightweight dashboards to make public sharing of journeys effortless and aligned with growth.
+
+10. Risks & Mitigations
+Regulatory
+
+Risk: appearing to give medical advice or dosing guidance.
+
+Mitigation: strict positioning as tracking/journaling, clear disclaimers, and only evidence‑aligned educational content.
+
+Data security and trust
+
+Risk: breaches or misuse of sensitive health data.
+
+Mitigation: encryption at rest and in transit, minimal data retention, transparent privacy policies, and routine security reviews.
+
+Platform limitations
+
+Risk: hitting performance and flexibility ceilings on no‑code tools.
+
+Mitigation: design schemas that map cleanly to Firebase/Supabase, and plan early for a Flutter‑based code export or rebuild.
+
+Competitive response
+
+Risk: incumbents copying features or undercutting on price.
+
+Mitigation: stay ahead on stack‑centric features, experiment analytics, and creator integrations that are harder to fast‑follow.
+
+If you’d like, I can next turn this into:
+
+A shorter one‑pager for investors/partners, or
+
+A more technical requirements doc you can use directly as a spec while you’re building on Replit.
+
+Prepared by Deep Research
+Computer can take this research further
+Computer runs parallel research agents across dozens of sources, cross-references findings, and compiles everything into a formatted report.
