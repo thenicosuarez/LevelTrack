@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Camera, Trash2, Share2, X, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { ProgressPhoto, Glp1Log } from "@shared/schema";
+import type { ProgressPhoto, Glp1Log, User } from "@shared/schema";
 import html2canvas from "html2canvas";
+import { formatWeight, convertWeight } from "@/lib/weight-utils";
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T12:00:00");
@@ -51,11 +52,13 @@ function ShareCard({
   photos,
   latestLog,
   adherence,
+  weightUnit,
 }: {
   photo: ProgressPhoto;
   photos: ProgressPhoto[];
   latestLog: Glp1Log | null;
   adherence: number;
+  weightUnit: string;
 }) {
   const sorted = [...photos].sort((a, b) => a.date.localeCompare(b.date));
   const firstPhoto = sorted[0];
@@ -131,8 +134,8 @@ function ShareCard({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "12px 14px" }}>
         {[
-          { label: "Current Weight", value: photo.weight ? `${photo.weight} lbs` : "—" },
-          { label: "Weight Lost", value: weightLost != null && weightLost > 0 ? `-${weightLost} lbs` : "—" },
+          { label: "Current Weight", value: photo.weight ? formatWeight(photo.weight, weightUnit) : "—" },
+          { label: "Weight Lost", value: weightLost != null && weightLost > 0 ? `-${convertWeight(weightLost, weightUnit)} ${weightUnit}` : "—" },
           { label: "Days Tracked", value: `${daysTracked}` },
           { label: "Shot Adherence", value: `${adherence}%` },
         ].map(({ label, value }) => (
@@ -195,6 +198,12 @@ export default function Progress() {
   const { data: dashboardData } = useQuery<{ glp1Adherence: number }>({
     queryKey: ["/api/analytics/dashboard"],
   });
+
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/user"],
+  });
+
+  const weightUnit = user?.weightUnit ?? "lbs";
 
   const sortedPhotos = [...photos].sort((a, b) => b.date.localeCompare(a.date));
   const latestLog = glp1Logs.length > 0
@@ -302,17 +311,17 @@ export default function Progress() {
           <Card>
             <CardContent className="p-3 text-center">
               <div className="text-xl font-bold text-secondary">
-                {currentWeight ? `${currentWeight}` : "—"}
+                {currentWeight ? convertWeight(currentWeight, weightUnit) : "—"}
               </div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">Current lbs</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">Current {weightUnit}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
               <div className={`text-xl font-bold ${weightLost != null && weightLost > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                {weightLost != null && weightLost > 0 ? `-${weightLost}` : "—"}
+                {weightLost != null && weightLost > 0 ? `-${convertWeight(weightLost, weightUnit)}` : "—"}
               </div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">lbs lost</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">{weightUnit} lost</div>
             </CardContent>
           </Card>
         </div>
@@ -377,7 +386,7 @@ export default function Progress() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Weight (lbs)</Label>
+                <Label className="text-sm font-medium">Weight ({weightUnit})</Label>
                 <Input
                   type="number"
                   step="0.1"
@@ -453,7 +462,7 @@ export default function Progress() {
                     <div className="w-full h-40 bg-muted flex flex-col items-center justify-center gap-1.5">
                       <Scale size={24} className="text-muted-foreground/40" />
                       {photo.weight && (
-                        <span className="text-sm font-bold text-muted-foreground">{photo.weight} lbs</span>
+                        <span className="text-sm font-bold text-muted-foreground">{formatWeight(photo.weight, weightUnit)}</span>
                       )}
                     </div>
                   )}
@@ -464,7 +473,7 @@ export default function Progress() {
                 <CardContent className="p-3 space-y-0.5">
                   <p className="text-xs font-semibold text-foreground">{formatDate(photo.date)}</p>
                   {photo.weight && (
-                    <p className="text-xs text-muted-foreground">{photo.weight} lbs</p>
+                    <p className="text-xs text-muted-foreground">{formatWeight(photo.weight, weightUnit)}</p>
                   )}
                   {photo.notes && (
                     <p className="text-[11px] text-muted-foreground line-clamp-1 italic">{photo.notes}</p>
@@ -500,6 +509,7 @@ export default function Progress() {
                 photos={photos}
                 latestLog={latestLog}
                 adherence={dashboardData?.glp1Adherence ?? 0}
+                weightUnit={weightUnit}
               />
             </div>
 

@@ -11,6 +11,7 @@ import {
 import type { TooltipProps, DotProps } from "recharts";
 import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2 } from "lucide-react";
 import { getDateRange } from "@/lib/date-utils";
+import { convertWeight } from "@/lib/weight-utils";
 import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto, User } from "@shared/schema";
 
 interface DashboardData {
@@ -137,9 +138,11 @@ export default function Analytics() {
     .sort((a, b) => a.date.localeCompare(b.date))
     .filter((e) => e.date >= startDate && e.date <= endDate);
 
+  const weightUnit = user?.weightUnit ?? "lbs";
+
   const weightChartData = allWeightEntries.map((e) => ({
     date: formatXDate(e.date),
-    weight: e.weight,
+    weight: convertWeight(e.weight, weightUnit),
   }));
 
   // ─── Dose timeline ─────────────────────────────────────────────────────────
@@ -182,20 +185,23 @@ export default function Analytics() {
 
   // ─── Stats ─────────────────────────────────────────────────────────────────
   const sortedWeights = allWeightEntries.sort((a, b) => a.date.localeCompare(b.date));
-  const firstWeight = sortedWeights[0]?.weight ?? null;
-  const lastWeight = sortedWeights[sortedWeights.length - 1]?.weight ?? null;
-  const totalLost = firstWeight && lastWeight ? Math.round((firstWeight - lastWeight) * 10) / 10 : null;
+  const firstWeightLbs = sortedWeights[0]?.weight ?? null;
+  const lastWeightLbs = sortedWeights[sortedWeights.length - 1]?.weight ?? null;
+  const lastWeight = lastWeightLbs != null ? convertWeight(lastWeightLbs, weightUnit) : null;
+  const totalLost = firstWeightLbs && lastWeightLbs
+    ? Math.round(convertWeight(firstWeightLbs - lastWeightLbs, weightUnit) * 10) / 10
+    : null;
 
   const totalShots = glp1Logs.filter((l) => l.date >= startDate && l.date <= endDate).length;
   const adherence = dashboardData?.glp1Adherence ?? 0;
 
   const goalWeight = user?.goalWeight ?? null;
-  const weightUnit = user?.weightUnit ?? "lbs";
+  const goalWeightConverted = goalWeight != null ? convertWeight(goalWeight, weightUnit) : null;
   const WeightTooltip = makeWeightTooltip(weightUnit);
 
   const allWeightsForDomain = [
     ...weightChartData.map((d) => d.weight),
-    ...(goalWeight != null ? [goalWeight] : []),
+    ...(goalWeightConverted != null ? [goalWeightConverted] : []),
   ];
   const weightMin = allWeightsForDomain.length > 0 ? Math.floor(Math.min(...allWeightsForDomain) - 2) : 0;
   const weightMax = allWeightsForDomain.length > 0 ? Math.ceil(Math.max(...allWeightsForDomain) + 2) : 300;
@@ -298,10 +304,10 @@ export default function Analytics() {
                     <span>Dose change</span>
                   </div>
                 )}
-                {goalWeight != null && (
+                {goalWeightConverted != null && (
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <div className="w-3 border-t border-dashed border-amber-500" />
-                    <span>Goal ({goalWeight} {user?.weightUnit ?? "lbs"})</span>
+                    <span>Goal ({goalWeightConverted} {weightUnit})</span>
                   </div>
                 )}
               </div>
@@ -327,9 +333,9 @@ export default function Analytics() {
                       label={{ value: `${dc.dose}mg`, fontSize: 9, fill: "#0d9488", position: "insideTopLeft" }}
                     />
                   ))}
-                  {goalWeight != null && (
+                  {goalWeightConverted != null && (
                     <ReferenceLine
-                      y={goalWeight}
+                      y={goalWeightConverted}
                       stroke="#f59e0b"
                       strokeWidth={1.5}
                       strokeDasharray="5 4"

@@ -6,6 +6,7 @@ import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle } from 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
+import { formatWeight, convertWeight } from "@/lib/weight-utils";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
@@ -97,10 +98,7 @@ export default function Dashboard() {
     return "Good evening";
   };
 
-  const formatWeight = (w: number | null) => {
-    if (!w) return "—";
-    return `${w} lbs`;
-  };
+  const weightUnit = user?.weightUnit ?? "lbs";
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -179,7 +177,7 @@ export default function Dashboard() {
         >
           <CardContent className="p-3 text-center">
             <div className="text-xl font-bold text-secondary">
-              {formatWeight(dashboardData?.latestWeight ?? null)}
+              {formatWeight(dashboardData?.latestWeight ?? null, weightUnit)}
             </div>
             <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Current wt.</div>
           </CardContent>
@@ -195,10 +193,10 @@ export default function Dashboard() {
                 : "text-muted-foreground"
             }`}>
               {dashboardData?.totalWeightLost && dashboardData.totalWeightLost > 0
-                ? `-${dashboardData.totalWeightLost}`
+                ? `-${convertWeight(dashboardData.totalWeightLost, weightUnit)}`
                 : "—"}
             </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">lbs lost</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">{weightUnit} lost</div>
           </CardContent>
         </Card>
       </div>
