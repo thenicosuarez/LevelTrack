@@ -19,6 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { Syringe, Target, Info, Pencil, Check, X } from "lucide-react";
 import type { User } from "@shared/schema";
+import { kgToLbs, convertWeight } from "@/lib/weight-utils";
 
 const NONE = "__none__";
 const INJECTION_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -73,6 +74,11 @@ export default function Settings() {
     queryKey: ["/api/drugs"],
   });
 
+  const storedWeightUnit = (user?.weightUnit as "lbs" | "kg") ?? "lbs";
+  const displayGoalWeight = user?.goalWeight != null
+    ? convertWeight(user.goalWeight, storedWeightUnit)
+    : null;
+
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     values: {
@@ -82,8 +88,8 @@ export default function Settings() {
       glp1InjectionFrequency: toFormSelect(user?.glp1InjectionFrequency),
       glp1InjectionDay: toFormSelect(user?.glp1InjectionDay),
       glp1StartDate: user?.glp1StartDate ?? "",
-      goalWeight: toFormStr(user?.goalWeight),
-      weightUnit: (user?.weightUnit as "lbs" | "kg") ?? "lbs",
+      goalWeight: toFormStr(displayGoalWeight),
+      weightUnit: storedWeightUnit,
     },
   });
 
@@ -104,6 +110,10 @@ export default function Settings() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: SettingsFormValues) => {
+      const rawGoalWeight = fromFormNum(data.goalWeight);
+      const goalWeightLbs = rawGoalWeight != null && data.weightUnit === "kg"
+        ? kgToLbs(rawGoalWeight)
+        : rawGoalWeight;
       const payload = {
         weightUnit: data.weightUnit,
         glp1Drug: fromFormSelect(data.glp1Drug),
@@ -112,7 +122,7 @@ export default function Settings() {
         glp1InjectionFrequency: fromFormSelect(data.glp1InjectionFrequency),
         glp1InjectionDay: fromFormSelect(data.glp1InjectionDay),
         glp1StartDate: data.glp1StartDate || null,
-        goalWeight: fromFormNum(data.goalWeight),
+        goalWeight: goalWeightLbs,
       };
       const res = await apiRequest("PATCH", "/api/user/settings", payload);
       return res.json();

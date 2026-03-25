@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { ProgressPhoto, Glp1Log, User } from "@shared/schema";
 import html2canvas from "html2canvas";
-import { formatWeight, convertWeight } from "@/lib/weight-utils";
+import { formatWeight, convertWeight, kgToLbs } from "@/lib/weight-utils";
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T12:00:00");
@@ -212,10 +212,14 @@ export default function Progress() {
 
   const createPhotoMutation = useMutation({
     mutationFn: async () => {
+      const rawWeight = formWeight ? parseFloat(formWeight) : null;
+      const weightLbs = rawWeight != null && weightUnit === "kg"
+        ? kgToLbs(rawWeight)
+        : rawWeight;
       const response = await apiRequest("POST", "/api/progress-photos", {
         date: today,
         photoUrl: pendingImage || null,
-        weight: formWeight ? parseFloat(formWeight) : null,
+        weight: weightLbs,
         notes: formNotes || null,
       });
       return response.json();
