@@ -357,20 +357,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const glp1DaysIn30 = recentGlp1.filter(m => m.date >= thirtyDaysAgo).length;
       const glp1Adherence = Math.min(Math.round((glp1DaysIn30 / 30) * 100), 100);
 
-      // Latest weight (from health_metrics or progress photos)
-      const sortedMetrics = [...allMetrics].sort((a, b) => b.date.localeCompare(a.date));
-      const metricWeight = sortedMetrics.find(m => m.weight != null)?.weight ?? null;
-      const sortedPhotos = [...allPhotos].sort((a, b) => b.date.localeCompare(a.date));
-      const photoWeight = sortedPhotos.find(p => p.weight != null)?.weight ?? null;
-      const latestWeight = metricWeight ?? photoWeight;
-
-      // Total weight lost (first vs latest entry across both sources)
-      const allWeightEntries = [
+      // Latest weight — most recent dated entry across both sources
+      const allWeightEntriesRaw = [
         ...allMetrics.filter(m => m.weight != null).map(m => ({ date: m.date, weight: m.weight! })),
         ...allPhotos.filter(p => p.weight != null).map(p => ({ date: p.date, weight: p.weight! })),
       ].sort((a, b) => a.date.localeCompare(b.date));
-      const firstEntry = allWeightEntries[0];
-      const lastEntry = allWeightEntries[allWeightEntries.length - 1];
+      const latestWeight = allWeightEntriesRaw.length > 0
+        ? allWeightEntriesRaw[allWeightEntriesRaw.length - 1].weight
+        : null;
+
+      // Total weight lost (first vs latest entry across both sources)
+      const firstEntry = allWeightEntriesRaw[0];
+      const lastEntry = allWeightEntriesRaw[allWeightEntriesRaw.length - 1];
       const totalWeightLost = firstEntry && lastEntry && firstEntry.date !== lastEntry.date
         ? Math.round((firstEntry.weight - lastEntry.weight) * 10) / 10
         : null;

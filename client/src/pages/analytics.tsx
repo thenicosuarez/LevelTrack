@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ScatterChart, Scatter, BarChart, Bar,
+  ResponsiveContainer, BarChart, Bar,
   ReferenceLine, Area, AreaChart, Legend,
 } from "recharts";
+import type { TooltipProps, DotProps } from "recharts";
 import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2 } from "lucide-react";
 import { getDateRange } from "@/lib/date-utils";
 import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto } from "@shared/schema";
@@ -51,18 +52,19 @@ function AdherenceRing({ pct }: { pct: number }) {
   );
 }
 
-const CustomDot = (props: any) => {
+const CustomDot = (props: DotProps) => {
   const { cx, cy } = props;
+  if (cx == null || cy == null) return null;
   return <circle cx={cx} cy={cy} r={4} fill="#3D27CC" stroke="#fff" strokeWidth={2} />;
 };
 
-const CustomTooltipWeight = ({ active, payload, label }: any) => {
+const CustomTooltipWeight = ({ active, payload, label }: TooltipProps<number, string>) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
-      <p className="font-semibold text-foreground mb-1">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.dataKey} style={{ color: p.color }}>
+      <p className="font-semibold text-foreground mb-1">{String(label)}</p>
+      {payload.map((p) => (
+        <p key={String(p.dataKey)} style={{ color: p.color }}>
           {p.name}: <span className="font-bold">{p.value} lbs</span>
         </p>
       ))}
@@ -70,13 +72,13 @@ const CustomTooltipWeight = ({ active, payload, label }: any) => {
   );
 };
 
-const CustomTooltipSymptom = ({ active, payload, label }: any) => {
+const CustomTooltipSymptom = ({ active, payload, label }: TooltipProps<number, string>) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
-      <p className="font-semibold text-foreground mb-1">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.dataKey} style={{ color: p.color }}>
+      <p className="font-semibold text-foreground mb-1">{String(label)}</p>
+      {payload.map((p) => (
+        <p key={String(p.dataKey)} style={{ color: p.color }}>
           {p.name}: <span className="font-bold">{p.value}/5</span>
         </p>
       ))}
@@ -159,6 +161,19 @@ export default function Analytics() {
     mood: l.mood,
     energy: l.energy,
   }));
+
+  // ─── Dose change reference lines for weight chart ─────────────────────────
+  // Find dates where dose amount changed (or first shot), formatted to match X axis
+  const doseChangeLines = filteredLogs.reduce<{ formattedDate: string; dose: number; drug: string }[]>(
+    (acc, log, i) => {
+      const prev = filteredLogs[i - 1];
+      if (i === 0 || (prev && prev.doseAmount !== log.doseAmount)) {
+        acc.push({ formattedDate: formatXDate(log.date), dose: log.doseAmount, drug: log.drugName });
+      }
+      return acc;
+    },
+    []
+  );
 
   // ─── Stats ─────────────────────────────────────────────────────────────────
   const sortedWeights = allWeightEntries.sort((a, b) => a.date.localeCompare(b.date));
@@ -262,29 +277,47 @@ export default function Analytics() {
               </p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3D27CC" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#3D27CC" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis domain={[weightMin, weightMax]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <Tooltip content={<CustomTooltipWeight />} />
-                <Area
-                  type="monotone"
-                  dataKey="weight"
-                  name="Weight"
-                  stroke="#3D27CC"
-                  strokeWidth={2.5}
-                  fill="url(#weightGrad)"
-                  dot={<CustomDot />}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <>
+              {doseChangeLines.length > 0 && (
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
+                  <div className="w-3 border-t border-dashed border-teal-500" />
+                  <span>Dose change</span>
+                </div>
+              )}
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3D27CC" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#3D27CC" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis domain={[weightMin, weightMax]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip content={<CustomTooltipWeight />} />
+                  {doseChangeLines.map((dc) => (
+                    <ReferenceLine
+                      key={`dose-${dc.formattedDate}-${dc.dose}`}
+                      x={dc.formattedDate}
+                      stroke="#0d9488"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                      label={{ value: `${dc.dose}mg`, fontSize: 9, fill: "#0d9488", position: "insideTopLeft" }}
+                    />
+                  ))}
+                  <Area
+                    type="monotone"
+                    dataKey="weight"
+                    name="Weight"
+                    stroke="#3D27CC"
+                    strokeWidth={2.5}
+                    fill="url(#weightGrad)"
+                    dot={<CustomDot />}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </>
           )}
         </CardContent>
       </Card>

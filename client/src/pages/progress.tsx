@@ -59,6 +59,14 @@ function ShareCard({
 }) {
   const sorted = [...photos].sort((a, b) => a.date.localeCompare(b.date));
   const firstPhoto = sorted[0];
+
+  // Before/after: show side-by-side when earliest photo ≠ selected and both have images
+  const photosWithImage = sorted.filter((p) => p.photoUrl);
+  const beforePhoto = photosWithImage.length > 1 && photosWithImage[0].id !== photo.id
+    ? photosWithImage[0]
+    : null;
+  const showBeforeAfter = beforePhoto !== null && photo.photoUrl != null;
+
   const weightLost =
     firstPhoto?.weight && photo.weight
       ? Math.round((firstPhoto.weight - photo.weight) * 10) / 10
@@ -89,16 +97,37 @@ function ShareCard({
         </div>
       </div>
 
-      {photo.photoUrl && (
+      {showBeforeAfter ? (
+        <div style={{ margin: "0 14px", display: "flex", gap: 6 }}>
+          <div style={{ flex: 1, borderRadius: 10, overflow: "hidden", position: "relative" }}>
+            <img
+              src={beforePhoto!.photoUrl!}
+              alt="Before"
+              style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }}
+              crossOrigin="anonymous"
+            />
+            <div style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>BEFORE</div>
+          </div>
+          <div style={{ flex: 1, borderRadius: 10, overflow: "hidden", position: "relative" }}>
+            <img
+              src={photo.photoUrl!}
+              alt="After"
+              style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }}
+              crossOrigin="anonymous"
+            />
+            <div style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>AFTER</div>
+          </div>
+        </div>
+      ) : photo.photoUrl ? (
         <div style={{ margin: "0 14px", borderRadius: 12, overflow: "hidden" }}>
           <img
             src={photo.photoUrl}
             alt="Progress"
-            style={{ width: "100%", height: 200, objectFit: "cover", display: "block" }}
+            style={{ width: "100%", height: 190, objectFit: "cover", display: "block" }}
             crossOrigin="anonymous"
           />
         </div>
-      )}
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "12px 14px" }}>
         {[
