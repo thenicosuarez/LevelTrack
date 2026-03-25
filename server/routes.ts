@@ -2,11 +2,23 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
+import { z } from "zod";
 import { 
   insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
   insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema,
   insertGlp1LogSchema, insertSideEffectLogSchema, insertProgressPhotoSchema,
 } from "@shared/schema";
+
+const updateUserSettingsSchema = z.object({
+  name: z.string().min(1).optional(),
+  glp1Drug: z.string().optional().nullable(),
+  glp1Dose: z.number().positive().optional().nullable(),
+  glp1DoseUnit: z.string().optional().nullable(),
+  glp1InjectionDay: z.string().optional().nullable(),
+  glp1StartDate: z.string().optional().nullable(),
+  goalWeight: z.number().positive().optional().nullable(),
+  weightUnit: z.enum(["lbs", "kg"]).optional(),
+});
 
 // Curated GLP-1 and peptide drug list
 const GLP1_DRUGS = [
@@ -57,6 +69,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.patch("/api/user/settings", async (req, res) => {
+    try {
+      const validatedData = updateUserSettingsSchema.parse(req.body);
+      const user = await storage.updateUser(currentUserId, validatedData);
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid settings data" });
     }
   });
 

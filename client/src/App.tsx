@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,7 +8,7 @@ import LogShot from "@/pages/log-shot";
 import Journal from "@/pages/journal";
 import Progress from "@/pages/progress";
 import Analytics from "@/pages/analytics";
-import Profile from "@/pages/profile";
+import Settings from "@/pages/settings";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
 
@@ -23,7 +23,10 @@ function Router() {
           <Route path="/journal" component={Journal} />
           <Route path="/progress" component={Progress} />
           <Route path="/analytics" component={Analytics} />
-          <Route path="/profile" component={Profile} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/profile">
+            <Redirect to="/settings" />
+          </Route>
           <Route>
             <div className="flex items-center justify-center h-64">
               <p className="text-muted-foreground">Page not found</p>

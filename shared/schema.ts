@@ -11,6 +11,14 @@ export const users = pgTable("users", {
   streak: integer("streak").default(0),
   totalCompliance: integer("total_compliance").default(0),
   createdAt: timestamp("created_at").defaultNow(),
+  // GLP-1 settings
+  glp1Drug: text("glp1_drug"),
+  glp1Dose: real("glp1_dose"),
+  glp1DoseUnit: text("glp1_dose_unit"),
+  glp1InjectionDay: text("glp1_injection_day"), // Mon, Tue, Wed, Thu, Fri, Sat, Sun
+  glp1StartDate: text("glp1_start_date"), // YYYY-MM-DD
+  goalWeight: real("goal_weight"), // lbs
+  weightUnit: text("weight_unit").default("lbs"), // lbs or kg
 });
 
 export const protocols = pgTable("protocols", {

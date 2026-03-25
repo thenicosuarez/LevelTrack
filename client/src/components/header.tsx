@@ -1,4 +1,4 @@
-import { Bell, Activity } from "lucide-react";
+import { Bell, Activity, Settings } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ const pageTitles: Record<string, string> = {
   "/log-shot": "Log Shot",
   "/journal": "Symptom Journal",
   "/progress": "Progress",
-  "/profile": "Profile",
+  "/analytics": "Analytics",
+  "/settings": "Settings",
 };
 
 export default function Header() {
@@ -18,7 +19,7 @@ export default function Header() {
     queryKey: ['/api/user'],
   });
 
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const title = pageTitles[location] ?? "LevelTrack";
 
   return (
@@ -35,8 +36,17 @@ export default function Header() {
           <Button variant="ghost" size="sm" className="w-9 h-9 p-0 rounded-full">
             <Bell className="text-muted-foreground" size={17} />
           </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-9 h-9 p-0 rounded-full"
+            onClick={() => setLocation("/settings")}
+          >
+            <Settings className="text-muted-foreground" size={17} />
+          </Button>
           
-          <Avatar className="w-8 h-8">
+          <Avatar className="w-8 h-8 cursor-pointer" onClick={() => setLocation("/settings")}>
             <AvatarImage src={user?.avatar || undefined} alt={user?.name} />
             <AvatarFallback className="text-xs font-semibold bg-primary text-primary-foreground">
               {user?.name?.charAt(0)?.toUpperCase() || 'U'}

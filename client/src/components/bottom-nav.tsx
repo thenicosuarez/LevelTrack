@@ -1,12 +1,12 @@
 import { useLocation } from "wouter";
-import { Home, Syringe, BookOpen, LineChart, User } from "lucide-react";
+import { Home, Syringe, BookOpen, LineChart, BarChart2 } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home },
   { path: "/log-shot", label: "Log Shot", icon: Syringe },
   { path: "/journal", label: "Journal", icon: BookOpen },
   { path: "/progress", label: "Progress", icon: LineChart },
-  { path: "/profile", label: "Profile", icon: User },
+  { path: "/analytics", label: "Analytics", icon: BarChart2 },
 ];
 
 export default function BottomNav() {

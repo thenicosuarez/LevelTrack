@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -12,7 +11,7 @@ import {
 import type { TooltipProps, DotProps } from "recharts";
 import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2 } from "lucide-react";
 import { getDateRange } from "@/lib/date-utils";
-import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto } from "@shared/schema";
+import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto, User } from "@shared/schema";
 
 interface DashboardData {
   glp1Adherence: number;
@@ -94,6 +93,10 @@ export default function Analytics() {
 
   const { data: dashboardData } = useQuery<DashboardData>({
     queryKey: ["/api/analytics/dashboard"],
+  });
+
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/user"],
   });
 
   const { data: healthMetrics = [] } = useQuery<HealthMetric[]>({
@@ -184,8 +187,14 @@ export default function Analytics() {
   const totalShots = glp1Logs.filter((l) => l.date >= startDate && l.date <= endDate).length;
   const adherence = dashboardData?.glp1Adherence ?? 0;
 
-  const weightMin = weightChartData.length > 0 ? Math.floor(Math.min(...weightChartData.map((d) => d.weight)) - 2) : 0;
-  const weightMax = weightChartData.length > 0 ? Math.ceil(Math.max(...weightChartData.map((d) => d.weight)) + 2) : 300;
+  const goalWeight = user?.goalWeight ?? null;
+
+  const allWeightsForDomain = [
+    ...weightChartData.map((d) => d.weight),
+    ...(goalWeight != null ? [goalWeight] : []),
+  ];
+  const weightMin = allWeightsForDomain.length > 0 ? Math.floor(Math.min(...allWeightsForDomain) - 2) : 0;
+  const weightMax = allWeightsForDomain.length > 0 ? Math.ceil(Math.max(...allWeightsForDomain) + 2) : 300;
 
   return (
     <div className="px-4 py-5 space-y-5">
@@ -278,12 +287,20 @@ export default function Analytics() {
             </div>
           ) : (
             <>
-              {doseChangeLines.length > 0 && (
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1">
-                  <div className="w-3 border-t border-dashed border-teal-500" />
-                  <span>Dose change</span>
-                </div>
-              )}
+              <div className="flex items-center gap-3 flex-wrap">
+                {doseChangeLines.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="w-3 border-t border-dashed border-teal-500" />
+                    <span>Dose change</span>
+                  </div>
+                )}
+                {goalWeight != null && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="w-3 border-t border-dashed border-amber-500" />
+                    <span>Goal ({goalWeight} {user?.weightUnit ?? "lbs"})</span>
+                  </div>
+                )}
+              </div>
               <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <defs>
@@ -306,6 +323,15 @@ export default function Analytics() {
                       label={{ value: `${dc.dose}mg`, fontSize: 9, fill: "#0d9488", position: "insideTopLeft" }}
                     />
                   ))}
+                  {goalWeight != null && (
+                    <ReferenceLine
+                      y={goalWeight}
+                      stroke="#f59e0b"
+                      strokeWidth={1.5}
+                      strokeDasharray="5 4"
+                      label={{ value: "Goal", fontSize: 9, fill: "#f59e0b", position: "insideTopRight" }}
+                    />
+                  )}
                   <Area
                     type="monotone"
                     dataKey="weight"
