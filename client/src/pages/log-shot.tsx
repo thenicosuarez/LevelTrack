@@ -39,8 +39,11 @@ const FORMULATIONS = [
   "Other",
 ];
 
+const CUSTOM_DRUG_VALUE = "__custom__";
+
 const formSchema = z.object({
   drugName: z.string().min(1, "Please select a drug"),
+  customDrugName: z.string().optional(),
   doseAmount: z.number({ invalid_type_error: "Enter a dose amount" }).positive("Must be positive"),
   doseUnit: z.string().min(1, "Select a unit"),
   formulation: z.string().optional(),
@@ -99,11 +102,13 @@ export default function LogShot() {
     control,
     setValue,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       drugName: "",
+      customDrugName: "",
       doseAmount: undefined,
       doseUnit: "mg",
       formulation: "",
@@ -116,11 +121,20 @@ export default function LogShot() {
 
   const createLogMutation = useMutation({
     mutationFn: async (data: FormValues) => {
+      const resolvedDrugName =
+        data.drugName === CUSTOM_DRUG_VALUE
+          ? (data.customDrugName?.trim() || "Custom")
+          : data.drugName;
       const response = await apiRequest("POST", "/api/glp1-logs", {
-        ...data,
+        drugName: resolvedDrugName,
+        doseAmount: data.doseAmount,
+        doseUnit: data.doseUnit,
+        formulation: data.formulation || undefined,
+        time: data.time,
         date: today,
         injectionSite: injectionSite || undefined,
         painScore,
+        notes: data.notes || undefined,
       });
       return response.json();
     },
@@ -128,7 +142,8 @@ export default function LogShot() {
       queryClient.invalidateQueries({ queryKey: ["/api/glp1-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({ title: "Shot logged!", description: "Your injection has been recorded." });
-      reset({ drugName: "", doseAmount: undefined, doseUnit: "mg", formulation: "", time: getNow(), notes: "" });
+      reset({ drugName: "", customDrugName: "", doseAmount: undefined, doseUnit: "mg", formulation: "", time: getNow(), notes: "" });
+      setSelectedDrug(null);
       setInjectionSite("");
       setPainScore(0);
     },
@@ -153,6 +168,7 @@ export default function LogShot() {
     setSelectedDrug(drug || null);
     if (drug) setValue("doseUnit", drug.defaultUnit);
     setValue("drugName", name);
+    if (name !== CUSTOM_DRUG_VALUE) setValue("customDrugName", "");
   };
 
   const onSubmit = (data: FormValues) => {
@@ -218,12 +234,33 @@ export default function LogShot() {
                           ))}
                         </div>
                       ))}
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-t mt-1">
+                        Other
+                      </div>
+                      <SelectItem value={CUSTOM_DRUG_VALUE}>
+                        <span className="font-medium">Custom / Other drug...</span>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 )}
               />
               {errors.drugName && <p className="text-xs text-destructive">{errors.drugName.message}</p>}
             </div>
+
+            {/* Custom drug name text input */}
+            {watch("drugName") === CUSTOM_DRUG_VALUE && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Drug / Compound Name</Label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Retatrutide, Cagrilintide, custom peptide..."
+                  className="h-12"
+                  {...register("customDrugName")}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">Enter the exact name of your drug or compound</p>
+              </div>
+            )}
 
             {/* Dose amount + unit */}
             <div className="grid grid-cols-2 gap-3">
