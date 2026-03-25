@@ -26,18 +26,6 @@ interface DashboardData {
   weeklyData: Array<{ date: string; compliance: number }>;
 }
 
-function StatCard({ value, label, color = "text-primary" }: { value: string; label: string; color?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4 text-center">
-        <div className={`text-2xl font-bold ${color}`}>{value}</div>
-        <div className="text-xs text-muted-foreground mt-0.5">{color}</div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
