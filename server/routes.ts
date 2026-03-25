@@ -521,6 +521,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/side-effect-logs", async (req, res) => {
     try {
       const validatedData = insertSideEffectLogSchema.parse({ ...req.body, userId: currentUserId });
+      const existing = await storage.getTodaySideEffectLog(currentUserId, validatedData.date);
+      if (existing) {
+        return res.status(409).json({ error: "A journal entry already exists for this date. Use PATCH to update it.", existingId: existing.id });
+      }
       const log = await storage.createSideEffectLog(validatedData);
       res.json(log);
     } catch (error) {

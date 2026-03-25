@@ -130,7 +130,9 @@ export default function Dashboard() {
                 <p className="text-sm font-semibold">Shot logged today</p>
                 <p className="text-xs opacity-80">
                   {dashboardData.todayShot?.drugName} {dashboardData.todayShot?.doseAmount}{dashboardData.todayShot?.doseUnit}
-                  {dashboardData.todayShot?.injectionSite ? ` · ${dashboardData.todayShot.injectionSite}` : ''}
+                  {dashboardData.todayShot?.injectionSite
+                    ? ` · ${dashboardData.todayShot.injectionSite.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
+                    : ''}
                 </p>
               </div>
             </div>

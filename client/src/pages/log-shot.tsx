@@ -65,6 +65,11 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatSite(site: string | null | undefined) {
+  if (!site) return "";
+  return site.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 function PainDots({ score }: { score: number | null }) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
   const color = score <= 3 ? "bg-green-500" : score <= 6 ? "bg-yellow-500" : "bg-red-500";
@@ -186,7 +191,7 @@ export default function LogShot() {
             <p className="text-sm font-semibold text-green-800">Shot logged today</p>
             <p className="text-xs text-green-700">
               {todayLog.drugName} {todayLog.doseAmount}{todayLog.doseUnit}
-              {todayLog.injectionSite ? ` · ${todayLog.injectionSite}` : ""} · {todayLog.time}
+              {todayLog.injectionSite ? ` · ${formatSite(todayLog.injectionSite)}` : ""} · {todayLog.time}
             </p>
           </div>
         </div>
@@ -433,7 +438,7 @@ export default function LogShot() {
                       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                         <span>{formatDate(log.date)} · {log.time}</span>
                         {log.injectionSite && (
-                          <span className="capitalize">📍 {log.injectionSite.replace("-", " ")}</span>
+                          <span>📍 {formatSite(log.injectionSite)}</span>
                         )}
                       </div>
                       {log.painScore != null && log.painScore > 0 && (
