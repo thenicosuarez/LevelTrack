@@ -256,8 +256,8 @@ export default function Profile() {
       <Card>
         <CardContent className="p-6">
           <div className="text-center text-sm text-gray-600">
-            <p>Nurtur Stack v1.0.0</p>
-            <p className="mt-1">Built with 💚 for optimal health</p>
+            <p>LevelTrack v1.0.0</p>
+            <p className="mt-1">Your GLP-1 & metabolic health tracker</p>
           </div>
         </CardContent>
       </Card>

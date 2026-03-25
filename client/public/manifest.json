@@ -1,0 +1,26 @@
+{
+  "name": "LevelTrack",
+  "short_name": "LevelTrack",
+  "description": "Track your GLP-1 shots, peptides, and metabolic health protocol.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6fa",
+  "theme_color": "#3B27CC",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "fitness", "medical"],
+  "lang": "en-US"
+}

@@ -4,8 +4,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
-import Calendar from "@/pages/calendar";
-import Protocols from "@/pages/protocols";
+import LogShot from "@/pages/log-shot";
+import Journal from "@/pages/journal";
+import Progress from "@/pages/progress";
 import Analytics from "@/pages/analytics";
 import Profile from "@/pages/profile";
 import Header from "@/components/header";
@@ -18,13 +19,14 @@ function Router() {
       <main className="bottom-nav-height">
         <Switch>
           <Route path="/" component={Dashboard} />
-          <Route path="/calendar" component={Calendar} />
-          <Route path="/protocols" component={Protocols} />
+          <Route path="/log-shot" component={LogShot} />
+          <Route path="/journal" component={Journal} />
+          <Route path="/progress" component={Progress} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/profile" component={Profile} />
           <Route>
             <div className="flex items-center justify-center h-64">
-              <p className="text-gray-500">Page not found</p>
+              <p className="text-muted-foreground">Page not found</p>
             </div>
           </Route>
         </Switch>

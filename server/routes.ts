@@ -4,19 +4,47 @@ import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
 import { 
   insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
-  insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema
+  insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema,
+  insertGlp1LogSchema, insertSideEffectLogSchema, insertProgressPhotoSchema,
 } from "@shared/schema";
+
+// Curated GLP-1 and peptide drug list
+const GLP1_DRUGS = [
+  // GLP-1 Receptor Agonists
+  { name: "Ozempic", category: "GLP-1", generic: "Semaglutide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Wegovy", category: "GLP-1", generic: "Semaglutide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Mounjaro", category: "GLP-1/GIP", generic: "Tirzepatide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Zepbound", category: "GLP-1/GIP", generic: "Tirzepatide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Rybelsus", category: "GLP-1", generic: "Semaglutide (oral)", units: ["mg"], defaultUnit: "mg" },
+  { name: "Victoza", category: "GLP-1", generic: "Liraglutide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Saxenda", category: "GLP-1", generic: "Liraglutide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Trulicity", category: "GLP-1", generic: "Dulaglutide", units: ["mg"], defaultUnit: "mg" },
+  { name: "Byetta", category: "GLP-1", generic: "Exenatide", units: ["mcg"], defaultUnit: "mcg" },
+  // Compounded / Generic
+  { name: "Semaglutide (compounded)", category: "GLP-1", generic: "Semaglutide", units: ["mg", "mcg"], defaultUnit: "mg" },
+  { name: "Tirzepatide (compounded)", category: "GLP-1/GIP", generic: "Tirzepatide", units: ["mg"], defaultUnit: "mg" },
+  // Peptides
+  { name: "BPC-157", category: "Peptide", generic: "BPC-157", units: ["mcg", "mg"], defaultUnit: "mcg" },
+  { name: "TB-500", category: "Peptide", generic: "Thymosin Beta-4", units: ["mcg", "mg"], defaultUnit: "mg" },
+  { name: "CJC-1295", category: "Peptide", generic: "CJC-1295", units: ["mcg"], defaultUnit: "mcg" },
+  { name: "Ipamorelin", category: "Peptide", generic: "Ipamorelin", units: ["mcg"], defaultUnit: "mcg" },
+  { name: "AOD-9604", category: "Peptide", generic: "AOD-9604", units: ["mcg"], defaultUnit: "mcg" },
+  { name: "MK-677", category: "Peptide", generic: "Ibutamoren", units: ["mg"], defaultUnit: "mg" },
+  { name: "PT-141", category: "Peptide", generic: "Bremelanotide", units: ["mg", "mcg"], defaultUnit: "mg" },
+  { name: "Sermorelin", category: "Peptide", generic: "Sermorelin", units: ["mcg"], defaultUnit: "mcg" },
+  { name: "Tesofensine", category: "Peptide", generic: "Tesofensine", units: ["mg"], defaultUnit: "mg" },
+  // Custom
+  { name: "Other (custom)", category: "Custom", generic: "", units: ["mg", "mcg", "IU", "units", "ml"], defaultUnit: "mg" },
+];
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const currentUserId = 1; // For demo purposes
 
-  // User routes
+  // ─── User routes ─────────────────────────────────────────────────────────
   app.get("/api/user", async (req, res) => {
     try {
       const user = await storage.getUser(currentUserId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
+      if (!user) return res.status(404).json({ error: "User not found" });
       res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch user" });
@@ -32,7 +60,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Protocol routes
+  // ─── Drug list ────────────────────────────────────────────────────────────
+  app.get("/api/drugs", (req, res) => {
+    res.json(GLP1_DRUGS);
+  });
+
+  // ─── Protocol routes ──────────────────────────────────────────────────────
   app.get("/api/protocols", async (req, res) => {
     try {
       const protocols = await storage.getProtocols(currentUserId);
@@ -45,9 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/protocols/:id", async (req, res) => {
     try {
       const protocol = await storage.getProtocol(parseInt(req.params.id));
-      if (!protocol) {
-        return res.status(404).json({ error: "Protocol not found" });
-      }
+      if (!protocol) return res.status(404).json({ error: "Protocol not found" });
       res.json(protocol);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch protocol" });
@@ -56,10 +87,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/protocols", async (req, res) => {
     try {
-      const validatedData = insertProtocolSchema.parse({
-        ...req.body,
-        userId: currentUserId,
-      });
+      const validatedData = insertProtocolSchema.parse({ ...req.body, userId: currentUserId });
       const protocol = await storage.createProtocol(validatedData);
       res.json(protocol);
     } catch (error) {
@@ -85,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Protocol items routes
+  // ─── Protocol items ───────────────────────────────────────────────────────
   app.get("/api/protocols/:id/items", async (req, res) => {
     try {
       const items = await storage.getProtocolItems(parseInt(req.params.id));
@@ -97,10 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/protocols/:id/items", async (req, res) => {
     try {
-      const validatedData = insertProtocolItemSchema.parse({
-        ...req.body,
-        protocolId: parseInt(req.params.id),
-      });
+      const validatedData = insertProtocolItemSchema.parse({ ...req.body, protocolId: parseInt(req.params.id) });
       const item = await storage.createProtocolItem(validatedData);
       res.json(item);
     } catch (error) {
@@ -128,115 +153,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/protocols/:id/items", async (req, res) => {
     try {
-      const protocolId = parseInt(req.params.id);
-      await storage.deleteProtocolItems(protocolId);
+      await storage.deleteProtocolItems(parseInt(req.params.id));
       res.json({ success: true });
     } catch (error) {
-      console.error("Delete protocol items error:", error);
       res.status(500).json({ error: "Failed to delete protocol items" });
     }
   });
 
-  // Simple test endpoint first
-  app.get("/api/debug/db-test", async (req, res) => {
-    try {
-      const protocols = await storage.getProtocols(currentUserId);
-      res.json({ 
-        success: true, 
-        protocolCount: protocols.length,
-        currentUserId
-      });
-    } catch (error) {
-      console.error("DB test error:", error);
-      res.status(500).json({ 
-        error: "Database connection failed",
-        details: error instanceof Error ? error.message : String(error)
-      });
-    }
-  });
-
-  // Test the specific method that's failing
-  app.get("/api/debug/tasks-test", async (req, res) => {
-    try {
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      console.log(`Testing getTasksForDateRange from ${startDate} to ${endDate}`);
-      const tasks = await storage.getTasksForDateRange(currentUserId, startDate, endDate);
-      console.log(`Found ${tasks.length} tasks`);
-      
-      res.json({ 
-        success: true, 
-        taskCount: tasks.length,
-        startDate,
-        endDate,
-        tasks: tasks.slice(0, 3) // Just first 3 for debugging
-      });
-    } catch (error) {
-      console.error("Tasks test error:", error);
-      res.status(500).json({ 
-        error: "getTasksForDateRange failed",
-        details: error instanceof Error ? error.message : String(error)
-      });
-    }
-  });
-
-  // Protocol compliance route - working implementation
+  // ─── Protocol compliance ──────────────────────────────────────────────────
   app.get("/api/protocols/compliance", async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
-      
-      // Get protocols first
       const protocols = await storage.getProtocols(currentUserId);
-      
-      // Calculate date range for the last N days
       const endDate = new Date().toISOString().split('T')[0];
       const startDateObj = new Date();
       startDateObj.setDate(startDateObj.getDate() - days);
       const startDate = startDateObj.toISOString().split('T')[0];
-      
-      // Get all tasks for the user
       const allTasks = await storage.getTasks(currentUserId);
-      
-      // Filter tasks to only include those in our date range
-      const relevantTasks = allTasks.filter(task => {
-        return task.date >= startDate && task.date <= endDate;
-      });
-      
-      // Initialize compliance tracking
+      const relevantTasks = allTasks.filter(t => t.date >= startDate && t.date <= endDate);
       const complianceData: Record<number, { total: number; completed: number }> = {};
-      protocols.forEach(protocol => {
-        complianceData[protocol.id] = { total: 0, completed: 0 };
-      });
-      
-      // Count tasks for each protocol
-      relevantTasks.forEach(task => {
-        if (complianceData[task.protocolId]) {
-          complianceData[task.protocolId].total++;
-          if (task.completed) {
-            complianceData[task.protocolId].completed++;
-          }
+      protocols.forEach(p => { complianceData[p.id] = { total: 0, completed: 0 }; });
+      relevantTasks.forEach(t => {
+        if (complianceData[t.protocolId]) {
+          complianceData[t.protocolId].total++;
+          if (t.completed) complianceData[t.protocolId].completed++;
         }
       });
-      
-      // Convert to percentages
       const compliancePercentages: Record<number, number> = {};
-      Object.entries(complianceData).forEach(([protocolId, data]) => {
-        const percentage = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
-        compliancePercentages[parseInt(protocolId)] = percentage;
+      Object.entries(complianceData).forEach(([id, data]) => {
+        compliancePercentages[parseInt(id)] = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
       });
-      
       res.json(compliancePercentages);
     } catch (error) {
-      console.error("Compliance calculation error:", error);
-      res.status(500).json({ 
-        error: "Failed to calculate compliance", 
-        details: error instanceof Error ? error.message : "Unknown error"
-      });
+      res.status(500).json({ error: "Failed to calculate compliance" });
     }
   });
 
-  // Task routes
+  // ─── Tasks ────────────────────────────────────────────────────────────────
   app.get("/api/tasks", async (req, res) => {
     try {
       const date = req.query.date as string;
@@ -251,49 +204,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { date } = req.body;
       const targetDate = date || new Date().toISOString().split('T')[0];
-      
-      // Get active protocols for the user
       const protocols = await storage.getProtocols(currentUserId);
       const activeProtocols = protocols.filter(p => {
-        // Only include protocols that have started
-        if (p.startDate && p.startDate > targetDate) {
-          return false;
-        }
+        if (p.startDate && p.startDate > targetDate) return false;
         return p.isActive;
       });
-      
-      // Generate tasks for each protocol
       const generatedTasks = [];
       for (const protocol of activeProtocols) {
         const items = await storage.getProtocolItems(protocol.id);
-        
         for (const item of items) {
-          // Check if task already exists for this date
           const existingTasks = await storage.getTasks(currentUserId, targetDate);
-          const taskExists = existingTasks.some(t => 
-            t.protocolId === protocol.id && 
-            t.protocolItemId === item.id && 
-            t.date === targetDate
+          const taskExists = existingTasks.some(t =>
+            t.protocolId === protocol.id && t.protocolItemId === item.id && t.date === targetDate
           );
-          
           if (!taskExists) {
             const task = await storage.createTask({
-              userId: currentUserId,
-              protocolId: protocol.id,
-              protocolItemId: item.id,
-              date: targetDate,
-              completed: false,
-              notes: null,
+              userId: currentUserId, protocolId: protocol.id,
+              protocolItemId: item.id, date: targetDate, completed: false, notes: null,
             });
             generatedTasks.push(task);
           }
         }
       }
-      
-      res.json({ 
-        message: `Generated ${generatedTasks.length} tasks for ${targetDate}`,
-        tasks: generatedTasks
-      });
+      res.json({ message: `Generated ${generatedTasks.length} tasks for ${targetDate}`, tasks: generatedTasks });
     } catch (error) {
       res.status(500).json({ error: "Failed to generate tasks" });
     }
@@ -301,10 +234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tasks", async (req, res) => {
     try {
-      const validatedData = insertTaskSchema.parse({
-        ...req.body,
-        userId: currentUserId,
-      });
+      const validatedData = insertTaskSchema.parse({ ...req.body, userId: currentUserId });
       const task = await storage.createTask(validatedData);
       res.json(task);
     } catch (error) {
@@ -314,21 +244,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/tasks/:id", async (req, res) => {
     try {
-      const taskId = parseInt(req.params.id);
       const updates = req.body;
-      
-      // Handle timestamp properly - don't set it here, let the database handle it
-      if (updates.completed === true && !updates.completedAt) {
-        // Remove completedAt from updates to avoid timestamp conversion issues
-        delete updates.completedAt;
-      } else if (updates.completed === false) {
-        updates.completedAt = null;
-      }
-      
-      const task = await storage.updateTask(taskId, updates);
+      if (updates.completed === true && !updates.completedAt) delete updates.completedAt;
+      else if (updates.completed === false) updates.completedAt = null;
+      const task = await storage.updateTask(parseInt(req.params.id), updates);
       res.json(task);
     } catch (error) {
-      console.error("Task update error:", error);
       res.status(500).json({ error: "Failed to update task" });
     }
   });
@@ -336,9 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/tasks/range", async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-      if (!startDate || !endDate) {
-        return res.status(400).json({ error: "Start date and end date are required" });
-      }
+      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
       const tasks = await storage.getTasksForDateRange(currentUserId, startDate as string, endDate as string);
       res.json(tasks);
     } catch (error) {
@@ -346,7 +265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Health metrics routes
+  // ─── Health Metrics ───────────────────────────────────────────────────────
   app.get("/api/health-metrics", async (req, res) => {
     try {
       const date = req.query.date as string;
@@ -359,10 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/health-metrics", async (req, res) => {
     try {
-      const validatedData = insertHealthMetricSchema.parse({
-        ...req.body,
-        userId: currentUserId,
-      });
+      const validatedData = insertHealthMetricSchema.parse({ ...req.body, userId: currentUserId });
       const metric = await storage.createHealthMetric(validatedData);
       res.json(metric);
     } catch (error) {
@@ -373,9 +289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health-metrics/range", async (req, res) => {
     try {
       const { startDate, endDate } = req.query;
-      if (!startDate || !endDate) {
-        return res.status(400).json({ error: "Start date and end date are required" });
-      }
+      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
       const metrics = await storage.getHealthMetricsForDateRange(currentUserId, startDate as string, endDate as string);
       res.json(metrics);
     } catch (error) {
@@ -383,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Integration routes
+  // ─── Integrations ─────────────────────────────────────────────────────────
   app.get("/api/integrations", async (req, res) => {
     try {
       const integrations = await storage.getIntegrations(currentUserId);
@@ -395,10 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/integrations", async (req, res) => {
     try {
-      const validatedData = insertIntegrationSchema.parse({
-        ...req.body,
-        userId: currentUserId,
-      });
+      const validatedData = insertIntegrationSchema.parse({ ...req.body, userId: currentUserId });
       const integration = await storage.createIntegration(validatedData);
       res.json(integration);
     } catch (error) {
@@ -415,16 +326,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Dashboard analytics
+  // ─── Dashboard analytics ──────────────────────────────────────────────────
   app.get("/api/analytics/dashboard", async (req, res) => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const [todayTasks, weekTasks, healthMetrics] = await Promise.all([
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const [todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics] = await Promise.all([
         storage.getTasks(currentUserId, today),
         storage.getTasksForDateRange(currentUserId, weekAgo, today),
-        storage.getHealthMetrics(currentUserId, today)
+        storage.getHealthMetrics(currentUserId, today),
+        storage.getTodayGlp1Log(currentUserId, today),
+        storage.getGlp1Logs(currentUserId),
+        storage.getHealthMetricsForDateRange(currentUserId, thirtyDaysAgo, today),
       ]);
 
       const todayCompleted = todayTasks.filter(t => t.completed).length;
@@ -437,6 +352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const latestMetrics = healthMetrics.length > 0 ? healthMetrics[0] : null;
 
+      // Calculate 30-day shot adherence
+      const glp1DaysIn30 = recentGlp1.filter(m => m.date >= thirtyDaysAgo).length;
+      const glp1Adherence = Math.min(Math.round((glp1DaysIn30 / 30) * 100), 100);
+
+      // Latest weight
+      const sortedMetrics = [...allMetrics].sort((a, b) => b.date.localeCompare(a.date));
+      const latestWeight = sortedMetrics.find(m => m.weight != null)?.weight ?? null;
+
+      // Latest shot info
+      const latestShot = recentGlp1.length > 0 ? recentGlp1[0] : null;
+
       res.json({
         todayCompliance,
         weekCompliance,
@@ -445,6 +371,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sleepHours: latestMetrics?.sleepHours || 0,
         mood: latestMetrics?.mood || 'fair',
         energy: latestMetrics?.energy || 5,
+        todayShotLogged: !!todayGlp1,
+        todayShot: todayGlp1 || null,
+        latestShot: latestShot || null,
+        glp1Adherence,
+        latestWeight,
         weeklyData: Array.from({ length: 7 }, (_, i) => {
           const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           const dayTasks = weekTasks.filter(t => t.date === date);
@@ -461,7 +392,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Voice Note routes
+  // ─── Voice Notes ──────────────────────────────────────────────────────────
   app.get("/api/voice-notes", async (req, res) => {
     try {
       const voiceNotes = await storage.getVoiceNotes(currentUserId);
@@ -474,9 +405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/voice-notes/:id", async (req, res) => {
     try {
       const voiceNote = await storage.getVoiceNote(parseInt(req.params.id));
-      if (!voiceNote) {
-        return res.status(404).json({ error: "Voice note not found" });
-      }
+      if (!voiceNote) return res.status(404).json({ error: "Voice note not found" });
       res.json(voiceNote);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch voice note" });
@@ -485,47 +414,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/voice-notes", async (req, res) => {
     try {
-      const validatedData = insertVoiceNoteSchema.parse({
-        ...req.body,
-        userId: currentUserId,
-      });
-      
+      const validatedData = insertVoiceNoteSchema.parse({ ...req.body, userId: currentUserId });
       const voiceNote = await storage.createVoiceNote(validatedData);
-      
-      // Process the voice note asynchronously
       processVoiceNoteAsync(voiceNote.id, req.body.audioData);
-      
       res.json(voiceNote);
     } catch (error) {
       res.status(400).json({ error: "Invalid voice note data" });
     }
   });
 
-  // Label scanning route
+  // ─── Label scanning ───────────────────────────────────────────────────────
   app.post("/api/scan-label", async (req, res) => {
     try {
-      // Mock response for now - will implement with OpenAI Vision API
-      const mockResult = {
-        supplementName: "Magnesium Glycinate",
-        brand: "Thorne",
-        dosageAmount: "200",
-        dosageUnit: "mg",
-        servingSize: "2 capsules",
-        ingredients: ["Magnesium Glycinate", "Hypromellose", "Microcrystalline Cellulose"],
-        confidence: 92,
-        suggestions: [
-          "Take with food for better absorption",
-          "Consider timing before bedtime for sleep benefits",
-          "Start with 1 capsule to assess tolerance"
-        ]
-      };
-      
-      // Simulate processing time
       setTimeout(() => {
-        res.json(mockResult);
+        res.json({
+          supplementName: "Magnesium Glycinate",
+          brand: "Thorne",
+          dosageAmount: "200",
+          dosageUnit: "mg",
+          servingSize: "2 capsules",
+          ingredients: ["Magnesium Glycinate", "Hypromellose", "Microcrystalline Cellulose"],
+          confidence: 92,
+          suggestions: [
+            "Take with food for better absorption",
+            "Consider timing before bedtime for sleep benefits",
+            "Start with 1 capsule to assess tolerance"
+          ]
+        });
       }, 1000);
     } catch (error) {
       res.status(500).json({ error: "Failed to process label scan" });
+    }
+  });
+
+  // ─── GLP-1 Logs ───────────────────────────────────────────────────────────
+  app.get("/api/glp1-logs", async (req, res) => {
+    try {
+      const logs = await storage.getGlp1Logs(currentUserId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch GLP-1 logs" });
+    }
+  });
+
+  app.get("/api/glp1-logs/:id", async (req, res) => {
+    try {
+      const log = await storage.getGlp1Log(parseInt(req.params.id));
+      if (!log) return res.status(404).json({ error: "GLP-1 log not found" });
+      res.json(log);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch GLP-1 log" });
+    }
+  });
+
+  app.post("/api/glp1-logs", async (req, res) => {
+    try {
+      const validatedData = insertGlp1LogSchema.parse({ ...req.body, userId: currentUserId });
+      const log = await storage.createGlp1Log(validatedData);
+      res.json(log);
+    } catch (error) {
+      console.error("GLP-1 log creation error:", error);
+      res.status(400).json({ error: "Invalid GLP-1 log data" });
+    }
+  });
+
+  app.delete("/api/glp1-logs/:id", async (req, res) => {
+    try {
+      await storage.deleteGlp1Log(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete GLP-1 log" });
+    }
+  });
+
+  app.get("/api/glp1-logs/range", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
+      const logs = await storage.getGlp1LogsForDateRange(currentUserId, startDate as string, endDate as string);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch GLP-1 logs for date range" });
+    }
+  });
+
+  // ─── Side Effect Logs ─────────────────────────────────────────────────────
+  app.get("/api/side-effect-logs", async (req, res) => {
+    try {
+      const logs = await storage.getSideEffectLogs(currentUserId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch side effect logs" });
+    }
+  });
+
+  app.get("/api/side-effect-logs/today", async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const log = await storage.getTodaySideEffectLog(currentUserId, today);
+      res.json(log || null);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch today's side effect log" });
+    }
+  });
+
+  app.post("/api/side-effect-logs", async (req, res) => {
+    try {
+      const validatedData = insertSideEffectLogSchema.parse({ ...req.body, userId: currentUserId });
+      const log = await storage.createSideEffectLog(validatedData);
+      res.json(log);
+    } catch (error) {
+      console.error("Side effect log creation error:", error);
+      res.status(400).json({ error: "Invalid side effect log data" });
+    }
+  });
+
+  app.patch("/api/side-effect-logs/:id", async (req, res) => {
+    try {
+      const log = await storage.updateSideEffectLog(parseInt(req.params.id), req.body);
+      res.json(log);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update side effect log" });
+    }
+  });
+
+  app.get("/api/side-effect-logs/range", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
+      const logs = await storage.getSideEffectLogsForDateRange(currentUserId, startDate as string, endDate as string);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch side effect logs for date range" });
+    }
+  });
+
+  // ─── Progress Photos ──────────────────────────────────────────────────────
+  app.get("/api/progress-photos", async (req, res) => {
+    try {
+      const photos = await storage.getProgressPhotos(currentUserId);
+      res.json(photos);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch progress photos" });
+    }
+  });
+
+  app.post("/api/progress-photos", async (req, res) => {
+    try {
+      const validatedData = insertProgressPhotoSchema.parse({ ...req.body, userId: currentUserId });
+      const photo = await storage.createProgressPhoto(validatedData);
+      res.json(photo);
+    } catch (error) {
+      console.error("Progress photo creation error:", error);
+      res.status(400).json({ error: "Invalid progress photo data" });
+    }
+  });
+
+  app.delete("/api/progress-photos/:id", async (req, res) => {
+    try {
+      await storage.deleteProgressPhoto(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete progress photo" });
+    }
+  });
+
+  // ─── Debug endpoints ──────────────────────────────────────────────────────
+  app.get("/api/debug/db-test", async (req, res) => {
+    try {
+      const protocols = await storage.getProtocols(currentUserId);
+      res.json({ success: true, protocolCount: protocols.length, currentUserId });
+    } catch (error) {
+      res.status(500).json({ error: "Database connection failed", details: error instanceof Error ? error.message : String(error) });
     }
   });
 

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -87,7 +87,7 @@ export const healthMetrics = pgTable("health_metrics", {
   mood: text("mood"), // good, fair, poor
   energy: integer("energy"), // 1-10
   stress: integer("stress"), // 1-10
-  weight: integer("weight"), // in grams
+  weight: real("weight"), // in lbs (float for decimals)
   heartRate: integer("heart_rate"),
   steps: integer("steps"),
   source: text("source"), // oura, myfitnesspal, manual
@@ -117,7 +117,50 @@ export const voiceNotes = pgTable("voice_notes", {
   processedAt: timestamp("processed_at"),
 });
 
-// Insert schemas
+// ─── LevelTrack GLP-1 Tables ───────────────────────────────────────────────
+
+export const glp1Logs = pgTable("glp1_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  time: text("time").notNull(), // HH:MM
+  drugName: text("drug_name").notNull(), // e.g. "Ozempic", "Wegovy"
+  formulation: text("formulation"), // pre-filled pen, vial/syringe, auto-injector
+  doseAmount: real("dose_amount").notNull(), // e.g. 0.25, 0.5, 2.5
+  doseUnit: text("dose_unit").notNull().default("mg"), // mg, mcg, IU, units
+  injectionSite: text("injection_site"), // abdomen, thigh, upper-arm, buttocks
+  painScore: integer("pain_score"), // 0-10
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const sideEffectLogs = pgTable("side_effect_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  nausea: integer("nausea"), // 1-5
+  gi: integer("gi"), // GI discomfort 1-5
+  fatigue: integer("fatigue"), // 1-5
+  mood: integer("mood"), // 1-5
+  cravings: integer("cravings"), // 1-5 (lower = fewer cravings)
+  sleep: integer("sleep"), // 1-5
+  energy: integer("energy"), // 1-5
+  freeText: text("free_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const progressPhotos = pgTable("progress_photos", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  photoUrl: text("photo_url").notNull(), // base64 data URL or hosted URL
+  weight: real("weight"), // lbs at time of photo
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ─── Insert Schemas ────────────────────────────────────────────────────────
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -152,7 +195,23 @@ export const insertVoiceNoteSchema = createInsertSchema(voiceNotes).omit({
   processedAt: true,
 });
 
-// Types
+export const insertGlp1LogSchema = createInsertSchema(glp1Logs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSideEffectLogSchema = createInsertSchema(sideEffectLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertProgressPhotoSchema = createInsertSchema(progressPhotos).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ─── Types ────────────────────────────────────────────────────────────────
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
@@ -173,3 +232,12 @@ export type InsertIntegration = z.infer<typeof insertIntegrationSchema>;
 
 export type VoiceNote = typeof voiceNotes.$inferSelect;
 export type InsertVoiceNote = z.infer<typeof insertVoiceNoteSchema>;
+
+export type Glp1Log = typeof glp1Logs.$inferSelect;
+export type InsertGlp1Log = z.infer<typeof insertGlp1LogSchema>;
+
+export type SideEffectLog = typeof sideEffectLogs.$inferSelect;
+export type InsertSideEffectLog = z.infer<typeof insertSideEffectLogSchema>;
+
+export type ProgressPhoto = typeof progressPhotos.$inferSelect;
+export type InsertProgressPhoto = z.infer<typeof insertProgressPhotoSchema>;

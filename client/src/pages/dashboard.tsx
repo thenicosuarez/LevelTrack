@@ -2,17 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Camera, Calendar } from "lucide-react";
+import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
-import TaskItem from "@/components/task-item";
-import ProtocolBuilder from "@/components/protocol-builder";
-import VoiceNoteProcessor from "@/components/voice-note-processor";
-import LabelScanner from "@/components/label-scanner";
-import ProgressChart from "@/components/progress-chart";
-import SleepTrends from "@/components/sleep-trends";
-import FourHorsemenCard from "@/components/four-horsemen-card";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
@@ -25,25 +18,35 @@ interface DashboardData {
   sleepHours: number;
   mood: string;
   energy: number;
-  weeklyData: Array<{
-    date: string;
-    compliance: number;
-  }>;
+  todayShotLogged: boolean;
+  todayShot: { drugName: string; doseAmount: number; doseUnit: string; injectionSite?: string } | null;
+  latestShot: { drugName: string; doseAmount: number; doseUnit: string; date: string } | null;
+  glp1Adherence: number;
+  latestWeight: number | null;
+  weeklyData: Array<{ date: string; compliance: number }>;
+}
+
+function StatCard({ value, label, color = "text-primary" }: { value: string; label: string; color?: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4 text-center">
+        <div className={`text-2xl font-bold ${color}`}>{value}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">{color}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [showProtocolBuilder, setShowProtocolBuilder] = useState(false);
-  const [showLabelScanner, setShowLabelScanner] = useState(false);
   const today = formatDate(new Date());
 
-  const { data: user } = useQuery<User>({
-    queryKey: ['/api/user'],
-  });
+  const { data: user } = useQuery<User>({ queryKey: ['/api/user'] });
 
-  const { data: dashboardData } = useQuery<DashboardData>({
+  const { data: dashboardData, isLoading } = useQuery<DashboardData>({
     queryKey: ['/api/analytics/dashboard'],
   });
 
@@ -55,9 +58,7 @@ export default function Dashboard() {
     },
   });
 
-  const { data: protocols = [] } = useQuery<Protocol[]>({
-    queryKey: ['/api/protocols'],
-  });
+  const { data: protocols = [] } = useQuery<Protocol[]>({ queryKey: ['/api/protocols'] });
 
   const { data: protocolItems = [] } = useQuery<ProtocolItem[]>({
     queryKey: ['/api/protocol-items'],
@@ -72,7 +73,6 @@ export default function Dashboard() {
     enabled: protocols.length > 0,
   });
 
-  // Auto-generate tasks for today
   const generateTasksMutation = useMutation({
     mutationFn: async (date: string) => {
       const response = await apiRequest("POST", "/api/tasks/generate", { date });
@@ -83,290 +83,192 @@ export default function Dashboard() {
     },
   });
 
-  // Generate tasks when dashboard loads
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
     generateTasksMutation.mutate(today);
   }, []);
 
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { 
-        completed
-      });
+      const response = await apiRequest("PATCH", `/api/tasks/${taskId}`, { completed });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
       queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/protocols/compliance', 30] });
-      toast({
-        title: "Success",
-        description: "Task updated successfully",
-      });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update task",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
     },
   });
 
-
-
-  const handleTaskToggle = (taskId: number, completed: boolean) => {
-    toggleTaskMutation.mutate({ taskId, completed });
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
   };
 
-  const activeProtocols = protocols.filter(p => p.isActive);
-
-  // Calculate compliance client-side as fallback
-  const calculateCompliance = (protocol: any) => {
-    if (!todayTasks.length) return 0;
-    
-    const protocolTasks = todayTasks.filter(task => task.protocolId === protocol.id);
-    if (protocolTasks.length === 0) return 0;
-    
-    const completedTasks = protocolTasks.filter(task => task.completed);
-    return Math.round((completedTasks.length / protocolTasks.length) * 100);
+  const formatWeight = (w: number | null) => {
+    if (!w) return "—";
+    return `${w} lbs`;
   };
 
   return (
-    <div className="px-4 py-6 space-y-6">
-      {/* Welcome Section */}
-      <Card className="gradient-primary text-white">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Good Morning,</p>
-              <h2 className="text-xl font-semibold">{user?.name || "User"}</h2>
-              <p className="text-sm opacity-90 mt-1">Ready to optimize your day?</p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold">{user?.streak || 0}</div>
-              <div className="text-xs opacity-90">Day Streak</div>
+    <div className="px-4 py-5 space-y-5">
+
+      {/* Hero Card */}
+      <div className="gradient-primary rounded-2xl p-5 text-white shadow-lg">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm opacity-80">{getGreeting()},</p>
+            <h2 className="text-2xl font-bold mt-0.5">{user?.name || "there"}</h2>
+            <p className="text-sm opacity-75 mt-1">Track your protocol, stay on level.</p>
+          </div>
+          <div className="text-right">
+            <div className="text-3xl font-bold">{user?.streak || 0}</div>
+            <div className="text-xs opacity-80 flex items-center justify-end gap-1">
+              <Flame size={12} />
+              Day Streak
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Today's Metrics */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-primary">
-              {dashboardData?.todayCompliance || 0}%
+        {/* Today's shot status */}
+        <div className="mt-4 bg-white/15 rounded-xl p-3 flex items-center justify-between">
+          {dashboardData?.todayShotLogged ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={18} className="text-green-300" />
+              <div>
+                <p className="text-sm font-semibold">Shot logged today</p>
+                <p className="text-xs opacity-80">
+                  {dashboardData.todayShot?.drugName} {dashboardData.todayShot?.doseAmount}{dashboardData.todayShot?.doseUnit}
+                  {dashboardData.todayShot?.injectionSite ? ` · ${dashboardData.todayShot.injectionSite}` : ''}
+                </p>
+              </div>
             </div>
-            <div className="text-xs text-gray-600">Compliance</div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Circle size={18} className="opacity-60" />
+              <div>
+                <p className="text-sm font-semibold">No shot logged yet</p>
+                <p className="text-xs opacity-75">
+                  {dashboardData?.latestShot
+                    ? `Last: ${dashboardData.latestShot.drugName} on ${dashboardData.latestShot.date}`
+                    : "Log your first shot to get started"}
+                </p>
+              </div>
+            </div>
+          )}
+          <Button
+            size="sm"
+            className="bg-white text-primary hover:bg-white/90 font-semibold text-xs h-8 px-3 rounded-lg shrink-0"
+            onClick={() => setLocation("/log-shot")}
+          >
+            {dashboardData?.todayShotLogged ? "Edit" : "Log Shot"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Key Stats Row */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="p-3 text-center">
+            <div className="text-xl font-bold text-primary">
+              {dashboardData?.glp1Adherence ?? 0}%
+            </div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">30-day adherence</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-secondary">
-              {dashboardData?.sleepHours || 0}h
+          <CardContent className="p-3 text-center">
+            <div className="text-xl font-bold text-secondary">
+              {formatWeight(dashboardData?.latestWeight ?? null)}
             </div>
-            <div className="text-xs text-gray-600">Sleep</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Current weight</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-success capitalize">
-              {dashboardData?.mood || "Fair"}
+          <CardContent className="p-3 text-center">
+            <div className="text-xl font-bold text-accent">
+              {dashboardData?.todayCompliance ?? 0}%
             </div>
-            <div className="text-xs text-gray-600">Mood</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Today's stack</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Today's Protocol Progress */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-800">Today's Protocol</h3>
-            <Badge variant="secondary">
-              {dashboardData?.completedTasks || 0}/{dashboardData?.todayTasks || 0} Complete
-            </Badge>
-          </div>
-          
-          {todayTasks.length > 0 ? (
-            <div className="space-y-0 border rounded-lg overflow-hidden">
-              {/* Header */}
-              <div className="grid grid-cols-12 gap-2 p-3 bg-gray-50 text-sm font-medium text-gray-600 border-b">
-                <div className="col-span-1"></div>
-                <div className="col-span-3">Item</div>
-                <div className="col-span-2 text-center">Dosage</div>
-                <div className="col-span-6">Description</div>
-              </div>
-              
-              {/* Data Rows */}
-              {todayTasks.map((task, index) => {
-                const item = protocolItems.find(item => item.id === task.protocolItemId);
-                return item ? (
-                  <div key={task.id} className={`grid grid-cols-12 gap-2 p-3 items-center hover:bg-gray-50 ${index !== todayTasks.length - 1 ? 'border-b' : ''}`}>
-                    <div className="col-span-1">
-                      <input
-                        type="checkbox"
-                        checked={task.completed || false}
-                        onChange={(e) => handleTaskToggle(task.id, e.target.checked)}
-                        className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
-                      />
-                    </div>
-                    <div className="col-span-3">
-                      <div className="font-medium text-sm">{item.name}</div>
-                    </div>
-                    <div className="col-span-2 text-center text-sm">
-                      {item.dosageAmount ? `${item.dosageAmount}${item.dosageUnit}` : 'Daily'}
-                    </div>
-                    <div className="col-span-6 text-sm text-gray-600">
-                      {item.instructions || 'Daily routine tracking'}
+      {/* Today's Supplement Stack */}
+      {todayTasks.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-foreground">Today's Stack</h3>
+              <Badge variant="secondary" className="text-xs">
+                {dashboardData?.completedTasks || 0}/{dashboardData?.todayTasks || 0} done
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {todayTasks.map((task) => {
+                const item = protocolItems.find(i => i.id === task.protocolItemId);
+                if (!item) return null;
+                return (
+                  <div key={task.id} className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${task.completed ? 'bg-green-50' : 'bg-muted/50'}`}>
+                    <button
+                      onClick={() => toggleTaskMutation.mutate({ taskId: task.id, completed: !task.completed })}
+                      className="flex-shrink-0 touch-target flex items-center justify-center"
+                    >
+                      {task.completed
+                        ? <CheckCircle2 size={20} className="text-success" />
+                        : <Circle size={20} className="text-muted-foreground" />
+                      }
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                        {item.name}
+                      </p>
+                      {item.dosageAmount && (
+                        <p className="text-xs text-muted-foreground">{item.dosageAmount}{item.dosageUnit}</p>
+                      )}
                     </div>
                   </div>
-                ) : null;
+                );
               })}
             </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p>No tasks scheduled for today</p>
-              <Button 
-                variant="outline" 
-                className="mt-2"
-                onClick={() => setShowProtocolBuilder(true)}
-              >
-                Create Your First Protocol
-              </Button>
-            </div>
-          )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Active Protocols within Today's Protocol */}
-          {activeProtocols.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
-              <h4 className="font-medium text-slate-700 mb-3">Last 30 Days Performance</h4>
-              <div className="space-y-2">
-                {activeProtocols.map((protocol) => (
-                  <div key={protocol.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
-                        <div className="w-4 h-4 bg-white rounded-sm opacity-90" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-slate-800">{protocol.name}</div>
-                        <div className="text-xs text-gray-600">
-                          {protocol.category} • Active
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-primary">
-                        {calculateCompliance(protocol)}%
-                      </div>
-                      <div className="text-xs text-gray-600">Today</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Empty state */}
+      {todayTasks.length === 0 && !isLoading && (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <AlertCircle size={32} className="mx-auto mb-2 text-muted-foreground/40" />
+            <p className="font-medium text-foreground">No stack items today</p>
+            <p className="text-sm text-muted-foreground mt-1">Add supplements to your protocol to track them here</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-3 gap-3">
-            <Button 
-              variant="outline" 
-              className="flex items-center space-x-2 p-3 bg-primary/10 text-primary"
-              onClick={() => setShowProtocolBuilder(true)}
-            >
-              <Plus size={16} />
-              <span>New Protocol</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="flex items-center space-x-2 p-3 bg-secondary/10 text-secondary"
-              onClick={() => setLocation("/calendar")}
-            >
-              <Calendar size={16} />
-              <span>Calendar</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="flex items-center space-x-2 p-3 bg-accent/10 text-accent"
-              onClick={() => setShowLabelScanner(true)}
-            >
-              <Camera size={16} />
-              <span>Scan Label</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="outline"
+          className="h-14 flex flex-col gap-1 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
+          onClick={() => setLocation("/log-shot")}
+        >
+          <Syringe size={18} />
+          <span className="text-xs font-medium">Log Shot</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-14 flex flex-col gap-1 border-secondary/20 bg-secondary/5 text-secondary hover:bg-secondary/10"
+          onClick={() => setLocation("/progress")}
+        >
+          <TrendingDown size={18} />
+          <span className="text-xs font-medium">View Progress</span>
+        </Button>
+      </div>
 
-
-
-      {/* Voice Note Processor */}
-      <VoiceNoteProcessor 
-        onProtocolCreated={() => {
-          queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-        }}
-      />
-
-      {/* Label Scanner */}
-      {showLabelScanner && (
-        <LabelScanner 
-          onProtocolCreated={() => {
-            queryClient.invalidateQueries({ queryKey: ['/api/protocols'] });
-            queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-            setShowLabelScanner(false);
-          }}
-        />
-      )}
-
-      {/* 4 Horsemen Protection Summary */}
-      <FourHorsemenCard />
-
-      {/* Sleep Trends Visualization */}
-      <SleepTrends days={30} />
-
-      {/* Weekly Progress Chart */}
-      {dashboardData?.weeklyData && (
-        <ProgressChart data={dashboardData.weeklyData} />
-      )}
-
-      {/* Health Integration */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Health Integration</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
-                <div className="w-4 h-4 bg-white rounded-full" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">Oura Ring</div>
-                <div className="text-xs text-gray-500">Not Connected</div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <div className="w-4 h-4 bg-white rounded-full" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">MyFitnessPal</div>
-                <div className="text-xs text-gray-500">Not Connected</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <ProtocolBuilder 
-        open={showProtocolBuilder} 
-        onClose={() => setShowProtocolBuilder(false)} 
-      />
     </div>
   );
 }
