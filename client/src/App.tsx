@@ -9,6 +9,7 @@ import Journal from "@/pages/journal";
 import Progress from "@/pages/progress";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
+import Protocols from "@/pages/protocols";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
 
@@ -23,6 +24,7 @@ function Router() {
           <Route path="/journal" component={Journal} />
           <Route path="/progress" component={Progress} />
           <Route path="/analytics" component={Analytics} />
+          <Route path="/protocols" component={Protocols} />
           <Route path="/settings" component={Settings} />
           <Route path="/profile">
             <Redirect to="/settings" />
