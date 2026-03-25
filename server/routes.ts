@@ -457,6 +457,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/glp1-logs/range", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
+      const logs = await storage.getGlp1LogsForDateRange(currentUserId, startDate as string, endDate as string);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch GLP-1 logs for date range" });
+    }
+  });
+
   app.get("/api/glp1-logs/:id", async (req, res) => {
     try {
       const log = await storage.getGlp1Log(parseInt(req.params.id));
@@ -484,17 +495,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete GLP-1 log" });
-    }
-  });
-
-  app.get("/api/glp1-logs/range", async (req, res) => {
-    try {
-      const { startDate, endDate } = req.query;
-      if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
-      const logs = await storage.getGlp1LogsForDateRange(currentUserId, startDate as string, endDate as string);
-      res.json(logs);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch GLP-1 logs for date range" });
     }
   });
 
