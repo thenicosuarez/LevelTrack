@@ -339,7 +339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getHealthMetrics(currentUserId, today),
         storage.getTodayGlp1Log(currentUserId, today),
         storage.getGlp1Logs(currentUserId),
-        storage.getHealthMetricsForDateRange(currentUserId, thirtyDaysAgo, today),
+        storage.getHealthMetrics(currentUserId), // all-time, for accurate weight history
         storage.getProgressPhotos(currentUserId),
       ]);
 
