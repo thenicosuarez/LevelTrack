@@ -153,7 +153,7 @@ export const progressPhotos = pgTable("progress_photos", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
-  photoUrl: text("photo_url").notNull(), // base64 data URL or hosted URL
+  photoUrl: text("photo_url"), // base64 data URL or hosted URL (optional)
   weight: real("weight"), // lbs at time of photo
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -208,6 +208,10 @@ export const insertSideEffectLogSchema = createInsertSchema(sideEffectLogs).omit
 export const insertProgressPhotoSchema = createInsertSchema(progressPhotos).omit({
   id: true,
   createdAt: true,
+}).extend({
+  photoUrl: z.string().optional(),
+  weight: z.number().optional(),
+  notes: z.string().optional(),
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────

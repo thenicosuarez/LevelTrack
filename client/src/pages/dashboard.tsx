@@ -23,6 +23,7 @@ interface DashboardData {
   latestShot: { drugName: string; doseAmount: number; doseUnit: string; date: string } | null;
   glp1Adherence: number;
   latestWeight: number | null;
+  totalWeightLost: number | null;
   weeklyData: Array<{ date: string; compliance: number }>;
 }
 
@@ -159,30 +160,45 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Key Stats Row */}
+      {/* Key Stats Row — tappable to analytics */}
       <div className="grid grid-cols-3 gap-3">
-        <Card>
+        <Card
+          className="cursor-pointer active:scale-95 transition-transform"
+          onClick={() => setLocation("/analytics")}
+        >
           <CardContent className="p-3 text-center">
             <div className="text-xl font-bold text-primary">
               {dashboardData?.glp1Adherence ?? 0}%
             </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">30-day adherence</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Adherence</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer active:scale-95 transition-transform"
+          onClick={() => setLocation("/analytics")}
+        >
           <CardContent className="p-3 text-center">
             <div className="text-xl font-bold text-secondary">
               {formatWeight(dashboardData?.latestWeight ?? null)}
             </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Current weight</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Current wt.</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer active:scale-95 transition-transform"
+          onClick={() => setLocation("/analytics")}
+        >
           <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-accent">
-              {dashboardData?.todayCompliance ?? 0}%
+            <div className={`text-xl font-bold ${
+              dashboardData?.totalWeightLost && dashboardData.totalWeightLost > 0
+                ? "text-green-600"
+                : "text-muted-foreground"
+            }`}>
+              {dashboardData?.totalWeightLost && dashboardData.totalWeightLost > 0
+                ? `-${dashboardData.totalWeightLost}`
+                : "—"}
             </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Today's stack</div>
+            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">lbs lost</div>
           </CardContent>
         </Card>
       </div>

@@ -333,13 +333,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const [todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics] = await Promise.all([
+      const [todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics, allPhotos] = await Promise.all([
         storage.getTasks(currentUserId, today),
         storage.getTasksForDateRange(currentUserId, weekAgo, today),
         storage.getHealthMetrics(currentUserId, today),
         storage.getTodayGlp1Log(currentUserId, today),
         storage.getGlp1Logs(currentUserId),
         storage.getHealthMetricsForDateRange(currentUserId, thirtyDaysAgo, today),
+        storage.getProgressPhotos(currentUserId),
       ]);
 
       const todayCompleted = todayTasks.filter(t => t.completed).length;
@@ -356,9 +357,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const glp1DaysIn30 = recentGlp1.filter(m => m.date >= thirtyDaysAgo).length;
       const glp1Adherence = Math.min(Math.round((glp1DaysIn30 / 30) * 100), 100);
 
-      // Latest weight
+      // Latest weight (from health_metrics or progress photos)
       const sortedMetrics = [...allMetrics].sort((a, b) => b.date.localeCompare(a.date));
-      const latestWeight = sortedMetrics.find(m => m.weight != null)?.weight ?? null;
+      const metricWeight = sortedMetrics.find(m => m.weight != null)?.weight ?? null;
+      const sortedPhotos = [...allPhotos].sort((a, b) => b.date.localeCompare(a.date));
+      const photoWeight = sortedPhotos.find(p => p.weight != null)?.weight ?? null;
+      const latestWeight = metricWeight ?? photoWeight;
+
+      // Total weight lost (first vs latest entry across both sources)
+      const allWeightEntries = [
+        ...allMetrics.filter(m => m.weight != null).map(m => ({ date: m.date, weight: m.weight! })),
+        ...allPhotos.filter(p => p.weight != null).map(p => ({ date: p.date, weight: p.weight! })),
+      ].sort((a, b) => a.date.localeCompare(b.date));
+      const firstEntry = allWeightEntries[0];
+      const lastEntry = allWeightEntries[allWeightEntries.length - 1];
+      const totalWeightLost = firstEntry && lastEntry && firstEntry.date !== lastEntry.date
+        ? Math.round((firstEntry.weight - lastEntry.weight) * 10) / 10
+        : null;
 
       // Latest shot info
       const latestShot = recentGlp1.length > 0 ? recentGlp1[0] : null;
@@ -376,6 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         latestShot: latestShot || null,
         glp1Adherence,
         latestWeight,
+        totalWeightLost,
         weeklyData: Array.from({ length: 7 }, (_, i) => {
           const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           const dayTasks = weekTasks.filter(t => t.date === date);
@@ -565,7 +581,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/progress-photos", async (req, res) => {
     try {
-      const validatedData = insertProgressPhotoSchema.parse({ ...req.body, userId: currentUserId });
+      const cleanBody = Object.fromEntries(
+        Object.entries(req.body).filter(([_, v]) => v !== null && v !== undefined)
+      );
+      const validatedData = insertProgressPhotoSchema.parse({ ...cleanBody, userId: currentUserId });
       const photo = await storage.createProgressPhoto(validatedData);
       res.json(photo);
     } catch (error) {

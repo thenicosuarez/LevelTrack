@@ -1,239 +1,409 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Calendar, Target, Award, Clock } from "lucide-react";
-import ProgressChart from "@/components/progress-chart";
+import { Separator } from "@/components/ui/separator";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ScatterChart, Scatter, BarChart, Bar,
+  ReferenceLine, Area, AreaChart, Legend,
+} from "recharts";
+import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2 } from "lucide-react";
 import { getDateRange } from "@/lib/date-utils";
-import type { Task, HealthMetric } from "@shared/schema";
+import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto } from "@shared/schema";
 
-interface AnalyticsData {
-  todayCompliance: number;
-  weekCompliance: number;
-  monthCompliance: number;
-  totalTasks: number;
-  completedTasks: number;
-  streak: number;
-  weeklyData: Array<{
-    date: string;
-    compliance: number;
-  }>;
+interface DashboardData {
+  glp1Adherence: number;
+  latestWeight: number | null;
+  todayShotLogged: boolean;
+  todayShot: { drugName: string; doseAmount: number; doseUnit: string } | null;
+  latestShot: { drugName: string; doseAmount: number; doseUnit: string; date: string } | null;
 }
 
+type Period = "30" | "90" | "all";
+
+function formatXDate(dateStr: string) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function AdherenceRing({ pct }: { pct: number }) {
+  const r = 40;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+  const color = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+  return (
+    <svg width={100} height={100} viewBox="0 0 100 100">
+      <circle cx={50} cy={50} r={r} fill="none" stroke="#e5e7eb" strokeWidth={10} />
+      <circle
+        cx={50} cy={50} r={r} fill="none"
+        stroke={color} strokeWidth={10}
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform="rotate(-90 50 50)"
+      />
+      <text x={50} y={54} textAnchor="middle" fontSize={18} fontWeight={800} fill={color}>
+        {pct}%
+      </text>
+    </svg>
+  );
+}
+
+const CustomDot = (props: any) => {
+  const { cx, cy } = props;
+  return <circle cx={cx} cy={cy} r={4} fill="#3D27CC" stroke="#fff" strokeWidth={2} />;
+};
+
+const CustomTooltipWeight = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
+      <p className="font-semibold text-foreground mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ color: p.color }}>
+          {p.name}: <span className="font-bold">{p.value} lbs</span>
+        </p>
+      ))}
+    </div>
+  );
+};
+
+const CustomTooltipSymptom = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
+      <p className="font-semibold text-foreground mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} style={{ color: p.color }}>
+          {p.name}: <span className="font-bold">{p.value}/5</span>
+        </p>
+      ))}
+    </div>
+  );
+};
+
 export default function Analytics() {
-  const { startDate, endDate } = getDateRange(30);
+  const [period, setPeriod] = useState<Period>("30");
 
-  const { data: analyticsData } = useQuery<AnalyticsData>({
-    queryKey: ['/api/analytics/dashboard'],
-  });
+  const days = period === "all" ? 365 : parseInt(period);
+  const { startDate, endDate } = getDateRange(days);
 
-  const { data: tasks = [] } = useQuery<Task[]>({
-    queryKey: ['/api/tasks/range', { startDate, endDate }],
-    queryFn: () => fetch(`/api/tasks/range?startDate=${startDate}&endDate=${endDate}`).then(res => res.json()),
+  const { data: dashboardData } = useQuery<DashboardData>({
+    queryKey: ["/api/analytics/dashboard"],
   });
 
   const { data: healthMetrics = [] } = useQuery<HealthMetric[]>({
-    queryKey: ['/api/health-metrics/range', { startDate, endDate }],
-    queryFn: () => fetch(`/api/health-metrics/range?startDate=${startDate}&endDate=${endDate}`).then(res => res.json()),
+    queryKey: ["/api/health-metrics/range", { startDate, endDate }],
+    queryFn: () =>
+      fetch(`/api/health-metrics/range?startDate=${startDate}&endDate=${endDate}`).then((r) => r.json()),
   });
 
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.completed).length;
-  const overallCompliance = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const { data: glp1Logs = [] } = useQuery<Glp1Log[]>({
+    queryKey: ["/api/glp1-logs"],
+  });
 
-  const averageSleep = healthMetrics.length > 0 
-    ? Math.round(healthMetrics.reduce((sum, m) => sum + (m.sleepHours || 0), 0) / healthMetrics.length * 10) / 10
-    : 0;
+  const { data: sideEffectLogs = [] } = useQuery<SideEffectLog[]>({
+    queryKey: ["/api/side-effect-logs"],
+  });
 
-  const mockData = {
-    weeklyCompliance: Array.from({ length: 7 }, (_, i) => ({
-      date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      compliance: Math.floor(Math.random() * 30) + 70
-    })).reverse(),
-    monthlyTrends: [
-      { metric: "Compliance", value: overallCompliance, change: 5, trend: "up" },
-      { metric: "Sleep Quality", value: averageSleep, change: 0.3, trend: "up" },
-      { metric: "Energy Level", value: 7.2, change: -0.2, trend: "down" },
-      { metric: "Mood Score", value: 8.1, change: 0.4, trend: "up" },
-    ]
-  };
+  const { data: progressPhotos = [] } = useQuery<ProgressPhoto[]>({
+    queryKey: ["/api/progress-photos"],
+  });
+
+  // ─── Weight data: merge health_metrics + progress_photos weights ───────────
+  const weightFromMetrics = healthMetrics
+    .filter((m) => m.weight != null)
+    .map((m) => ({ date: m.date, weight: m.weight! }));
+
+  const weightFromPhotos = progressPhotos
+    .filter((p) => p.weight != null)
+    .map((p) => ({ date: p.date, weight: p.weight! }));
+
+  const allWeightEntries = [...weightFromMetrics, ...weightFromPhotos]
+    .reduce((acc, entry) => {
+      const existing = acc.find((e) => e.date === entry.date);
+      if (!existing) acc.push(entry);
+      return acc;
+    }, [] as { date: string; weight: number }[])
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter((e) => e.date >= startDate && e.date <= endDate);
+
+  const weightChartData = allWeightEntries.map((e) => ({
+    date: formatXDate(e.date),
+    weight: e.weight,
+  }));
+
+  // ─── Dose timeline ─────────────────────────────────────────────────────────
+  const filteredLogs = glp1Logs
+    .filter((l) => l.date >= startDate && l.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const doseData = filteredLogs.map((l) => ({
+    date: formatXDate(l.date),
+    dose: l.doseAmount,
+    drug: l.drugName,
+    unit: l.doseUnit,
+  }));
+
+  // ─── Side effect trends ────────────────────────────────────────────────────
+  const filteredSide = sideEffectLogs
+    .filter((l) => l.date >= startDate && l.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const sideData = filteredSide.map((l) => ({
+    date: formatXDate(l.date),
+    nausea: l.nausea,
+    fatigue: l.fatigue,
+    mood: l.mood,
+    energy: l.energy,
+  }));
+
+  // ─── Stats ─────────────────────────────────────────────────────────────────
+  const sortedWeights = allWeightEntries.sort((a, b) => a.date.localeCompare(b.date));
+  const firstWeight = sortedWeights[0]?.weight ?? null;
+  const lastWeight = sortedWeights[sortedWeights.length - 1]?.weight ?? null;
+  const totalLost = firstWeight && lastWeight ? Math.round((firstWeight - lastWeight) * 10) / 10 : null;
+
+  const totalShots = glp1Logs.filter((l) => l.date >= startDate && l.date <= endDate).length;
+  const adherence = dashboardData?.glp1Adherence ?? 0;
+
+  const weightMin = weightChartData.length > 0 ? Math.floor(Math.min(...weightChartData.map((d) => d.weight)) - 2) : 0;
+  const weightMax = weightChartData.length > 0 ? Math.ceil(Math.max(...weightChartData.map((d) => d.weight)) + 2) : 300;
 
   return (
-    <div className="px-4 py-6 space-y-6">
+    <div className="px-4 py-5 space-y-5">
+
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-800">Analytics</h1>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Calendar size={16} className="mr-1" />
-            30 Days
-          </Button>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Analytics</h2>
+          <p className="text-xs text-muted-foreground">Your GLP-1 journey data</p>
+        </div>
+        {/* Period toggle */}
+        <div className="flex gap-1 bg-muted rounded-xl p-1">
+          {([["30", "30d"], ["90", "90d"], ["all", "All"]] as [Period, string][]).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setPeriod(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                period === v ? "bg-white text-primary shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Adherence + stats row */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <AdherenceRing pct={adherence} />
+            <div className="flex-1 space-y-2">
+              <div>
+                <p className="text-sm font-bold text-foreground">Shot Adherence</p>
+                <p className="text-xs text-muted-foreground">30-day average</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-muted/60 rounded-xl p-2.5 text-center">
+                  <div className="text-lg font-bold text-primary">{totalShots}</div>
+                  <div className="text-[10px] text-muted-foreground">shots logged</div>
+                </div>
+                <div className="bg-muted/60 rounded-xl p-2.5 text-center">
+                  <div className={`text-lg font-bold ${totalLost && totalLost > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                    {totalLost != null && totalLost > 0 ? `-${totalLost}` : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">lbs lost</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Current protocol */}
+      {dashboardData?.latestShot && (
         <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-primary">{overallCompliance}%</div>
-            <div className="text-xs text-gray-600">Overall Compliance</div>
-            <div className="text-xs text-success flex items-center justify-center mt-1">
-              <TrendingUp size={10} className="mr-1" />
-              +5%
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-9 h-9 gradient-primary rounded-xl flex items-center justify-center shrink-0">
+              <Syringe size={16} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">Current Protocol</p>
+              <p className="text-xs text-muted-foreground">
+                {dashboardData.latestShot.drugName} · {dashboardData.latestShot.doseAmount}{dashboardData.latestShot.doseUnit} · last logged {formatXDate(dashboardData.latestShot.date)}
+              </p>
             </div>
           </CardContent>
         </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-secondary">{analyticsData?.streak || 0}</div>
-            <div className="text-xs text-gray-600">Current Streak</div>
-            <div className="text-xs text-success flex items-center justify-center mt-1">
-              <Award size={10} className="mr-1" />
-              Personal Best
+      )}
+
+      {/* Weight trend chart */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingDown size={16} className="text-primary" />
+              <span className="text-sm font-bold text-foreground">Weight Trend</span>
             </div>
+            {lastWeight && (
+              <Badge variant="secondary" className="text-xs">{lastWeight} lbs</Badge>
+            )}
+          </div>
+
+          {weightChartData.length < 2 ? (
+            <div className="h-40 flex flex-col items-center justify-center text-center gap-2">
+              <AlertCircle size={24} className="text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground">
+                Log weight with photos or in Progress tab to see your trend
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3D27CC" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#3D27CC" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis domain={[weightMin, weightMax]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <Tooltip content={<CustomTooltipWeight />} />
+                <Area
+                  type="monotone"
+                  dataKey="weight"
+                  name="Weight"
+                  stroke="#3D27CC"
+                  strokeWidth={2.5}
+                  fill="url(#weightGrad)"
+                  dot={<CustomDot />}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dose timeline */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Syringe size={16} className="text-primary" />
+            <span className="text-sm font-bold text-foreground">Shot Timeline</span>
+          </div>
+
+          {doseData.length === 0 ? (
+            <div className="h-32 flex flex-col items-center justify-center text-center gap-2">
+              <AlertCircle size={24} className="text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground">No shots logged in this period</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={doseData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <Tooltip
+                  formatter={(val, name, props) => [`${val} ${props.payload?.unit || ""}`, "Dose"]}
+                  labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                />
+                <Bar dataKey="dose" name="Dose" fill="#3D27CC" radius={[4, 4, 0, 0]} maxBarSize={32} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Side effect trends */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity size={16} className="text-primary" />
+              <span className="text-sm font-bold text-foreground">Symptom Trends</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">Scale: 1–5</span>
+          </div>
+
+          {sideData.length < 2 ? (
+            <div className="h-32 flex flex-col items-center justify-center text-center gap-2">
+              <AlertCircle size={24} className="text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground">Log 2+ journal entries to see trends</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={sideData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <Tooltip content={<CustomTooltipSymptom />} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Line type="monotone" dataKey="nausea" name="Nausea" stroke="#ef4444" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="fatigue" name="Fatigue" stroke="#f97316" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="mood" name="Mood" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="energy" name="Energy" stroke="#3D27CC" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* Legend note */}
+          {sideData.length >= 2 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+              <span>Nausea/Fatigue: lower is better</span>
+              <span>Mood/Energy: higher is better</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Summary table */}
+      {sideData.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart2 size={16} className="text-primary" />
+              <span className="text-sm font-bold text-foreground">Averages This Period</span>
+            </div>
+            {(() => {
+              const avg = (key: keyof typeof sideData[0]) =>
+                sideData.length > 0
+                  ? Math.round(sideData.reduce((s, d) => s + ((d[key] as number) ?? 0), 0) / sideData.length * 10) / 10
+                  : null;
+              const items = [
+                { label: "Nausea", value: avg("nausea"), emoji: "🤢", low: true },
+                { label: "Fatigue", value: avg("fatigue"), emoji: "😴", low: true },
+                { label: "Mood", value: avg("mood"), emoji: "😊", low: false },
+                { label: "Energy", value: avg("energy"), emoji: "⚡", low: false },
+              ];
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  {items.map(({ label, value, emoji, low }) => {
+                    const v = value ?? 0;
+                    const good = low ? v <= 2 : v >= 4;
+                    const mid = low ? v <= 3 : v >= 3;
+                    const color = good ? "text-green-600" : mid ? "text-yellow-600" : "text-red-500";
+                    return (
+                      <div key={label} className="bg-muted/50 rounded-xl p-3 flex items-center gap-2.5">
+                        <span className="text-xl">{emoji}</span>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">{label}</p>
+                          <p className={`text-base font-bold ${color}`}>{value ?? "—"}<span className="text-xs font-normal text-muted-foreground">/5</span></p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Weekly Progress */}
-      <ProgressChart data={mockData.weeklyCompliance} />
-
-      {/* Key Metrics */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Key Metrics</h3>
-          <div className="space-y-4">
-            {mockData.monthlyTrends.map((metric, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Target size={16} className="text-primary" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-slate-800">{metric.metric}</div>
-                    <div className="text-sm text-gray-600">
-                      {typeof metric.value === 'number' && metric.value % 1 === 0 
-                        ? metric.value 
-                        : typeof metric.value === 'number' 
-                          ? metric.value.toFixed(1) 
-                          : metric.value}
-                      {metric.metric.includes('Compliance') && '%'}
-                      {metric.metric.includes('Sleep') && 'hrs'}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant={metric.trend === 'up' ? 'default' : 'secondary'} className="text-xs">
-                    {metric.trend === 'up' ? (
-                      <TrendingUp size={10} className="mr-1" />
-                    ) : (
-                      <TrendingDown size={10} className="mr-1" />
-                    )}
-                    {metric.change > 0 ? '+' : ''}{metric.change}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Category Breakdown */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Category Performance</h3>
-          <div className="space-y-3">
-            {[
-              { category: "Supps & Rx", compliance: 94, color: "bg-primary" },
-              { category: "Exercise & Behavior", compliance: 87, color: "bg-accent" },
-              { category: "TR & IF: Meal Window", compliance: 89, color: "bg-secondary" },
-              { category: "CR & DR: Calories & Diet", compliance: 92, color: "bg-success" },
-            ].map((item, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">{item.category}</span>
-                  <span className="text-sm text-gray-600">{item.compliance}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${item.color}`}
-                    style={{ width: `${item.compliance}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Time Analysis */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Time Analysis</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <Clock size={24} className="mx-auto mb-2 text-primary" />
-              <div className="text-lg font-bold text-primary">8:15 AM</div>
-              <div className="text-sm text-gray-600">Best Performance Time</div>
-            </div>
-            <div className="text-center p-4 bg-gray-50 rounded-lg">
-              <Clock size={24} className="mx-auto mb-2 text-secondary" />
-              <div className="text-lg font-bold text-secondary">15 min</div>
-              <div className="text-sm text-gray-600">Avg Task Time</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Goals & Achievements */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Goals & Achievements</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-success/10 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <Award className="text-success" size={20} />
-                <div>
-                  <div className="font-medium text-slate-800">7-Day Streak</div>
-                  <div className="text-sm text-gray-600">Completed all daily tasks</div>
-                </div>
-              </div>
-              <Badge variant="default" className="bg-success">
-                Achieved
-              </Badge>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <Target className="text-primary" size={20} />
-                <div>
-                  <div className="font-medium text-slate-800">90% Compliance</div>
-                  <div className="text-sm text-gray-600">Monthly target</div>
-                </div>
-              </div>
-              <Badge variant="secondary">
-                In Progress
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Export Options */}
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-slate-800 mb-4">Export Data</h3>
-          <div className="flex space-x-3">
-            <Button variant="outline" className="flex-1">
-              Export CSV
-            </Button>
-            <Button variant="outline" className="flex-1">
-              Export JSON
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      )}
     </div>
   );
 }
