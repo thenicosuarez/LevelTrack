@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   glp1Drug: text("glp1_drug"),
   glp1Dose: real("glp1_dose"),
   glp1DoseUnit: text("glp1_dose_unit"),
+  glp1InjectionFrequency: text("glp1_injection_frequency"), // weekly, biweekly, daily
   glp1InjectionDay: text("glp1_injection_day"), // Mon, Tue, Wed, Thu, Fri, Sat, Sun
   glp1StartDate: text("glp1_start_date"), // YYYY-MM-DD
   goalWeight: real("goal_weight"), // lbs

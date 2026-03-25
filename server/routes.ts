@@ -14,6 +14,7 @@ const updateUserSettingsSchema = z.object({
   glp1Drug: z.string().optional().nullable(),
   glp1Dose: z.number().positive().optional().nullable(),
   glp1DoseUnit: z.string().optional().nullable(),
+  glp1InjectionFrequency: z.string().optional().nullable(),
   glp1InjectionDay: z.string().optional().nullable(),
   glp1StartDate: z.string().optional().nullable(),
   goalWeight: z.number().positive().optional().nullable(),

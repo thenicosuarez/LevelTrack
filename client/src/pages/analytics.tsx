@@ -57,19 +57,21 @@ const CustomDot = (props: DotProps) => {
   return <circle cx={cx} cy={cy} r={4} fill="#3D27CC" stroke="#fff" strokeWidth={2} />;
 };
 
-const CustomTooltipWeight = ({ active, payload, label }: TooltipProps<number, string>) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
-      <p className="font-semibold text-foreground mb-1">{String(label)}</p>
-      {payload.map((p) => (
-        <p key={String(p.dataKey)} style={{ color: p.color }}>
-          {p.name}: <span className="font-bold">{p.value} lbs</span>
-        </p>
-      ))}
-    </div>
-  );
-};
+function makeWeightTooltip(unit: string) {
+  return function CustomTooltipWeight({ active, payload, label }: TooltipProps<number, string>) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-border rounded-xl shadow-lg px-3 py-2 text-xs">
+        <p className="font-semibold text-foreground mb-1">{String(label)}</p>
+        {payload.map((p) => (
+          <p key={String(p.dataKey)} style={{ color: p.color }}>
+            {p.name}: <span className="font-bold">{p.value} {unit}</span>
+          </p>
+        ))}
+      </div>
+    );
+  };
+}
 
 const CustomTooltipSymptom = ({ active, payload, label }: TooltipProps<number, string>) => {
   if (!active || !payload?.length) return null;
@@ -188,6 +190,8 @@ export default function Analytics() {
   const adherence = dashboardData?.glp1Adherence ?? 0;
 
   const goalWeight = user?.goalWeight ?? null;
+  const weightUnit = user?.weightUnit ?? "lbs";
+  const WeightTooltip = makeWeightTooltip(weightUnit);
 
   const allWeightsForDomain = [
     ...weightChartData.map((d) => d.weight),
@@ -240,7 +244,7 @@ export default function Analytics() {
                   <div className={`text-lg font-bold ${totalLost && totalLost > 0 ? "text-green-600" : "text-muted-foreground"}`}>
                     {totalLost != null && totalLost > 0 ? `-${totalLost}` : "—"}
                   </div>
-                  <div className="text-[10px] text-muted-foreground">lbs lost</div>
+                  <div className="text-[10px] text-muted-foreground">{weightUnit} lost</div>
                 </div>
               </div>
             </div>
@@ -274,7 +278,7 @@ export default function Analytics() {
               <span className="text-sm font-bold text-foreground">Weight Trend</span>
             </div>
             {lastWeight && (
-              <Badge variant="secondary" className="text-xs">{lastWeight} lbs</Badge>
+              <Badge variant="secondary" className="text-xs">{lastWeight} {weightUnit}</Badge>
             )}
           </div>
 
@@ -312,7 +316,7 @@ export default function Analytics() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis domain={[weightMin, weightMax]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <Tooltip content={<CustomTooltipWeight />} />
+                  <Tooltip content={<WeightTooltip />} />
                   {doseChangeLines.map((dc) => (
                     <ReferenceLine
                       key={`dose-${dc.formattedDate}-${dc.dose}`}
