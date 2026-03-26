@@ -804,6 +804,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Device Integrations (Withings + Oura) ───────────────────────────────
 
+  // Build a deterministic base URL for OAuth redirect URIs.
+  // Prefers APP_BASE_URL env var (set in production) so the URI never
+  // depends on the request's protocol/host (which can be wrong behind proxies
+  // even with trust proxy enabled if the provider caches redirect URIs).
+  function getAppBaseUrl(req: Request): string {
+    if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, "");
+    return `${req.protocol}://${req.get("host")}`;
+  }
+
   // Per-request OAuth state nonces (server-side CSRF protection)
   // Map of state → { platform, expiresAt }
   const oauthStates = new Map<string, { platform: string; expiresAt: number }>();
@@ -882,7 +891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const clientId = process.env.WITHINGS_CLIENT_ID;
     if (!clientId) return res.status(503).json({ error: "Withings integration not configured. Set WITHINGS_CLIENT_ID and WITHINGS_CLIENT_SECRET." });
 
-    const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/withings/callback`;
+    const redirectUri = `${getAppBaseUrl(req)}/api/integrations/withings/callback`;
     const state = generateOAuthState("withings");
     const params = new URLSearchParams({
       response_type: "code",
@@ -907,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/withings/callback`;
+      const redirectUri = `${getAppBaseUrl(req)}/api/integrations/withings/callback`;
       const params = new URLSearchParams({
         action: "requesttoken",
         grant_type: "authorization_code",
@@ -973,7 +982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const clientId = process.env.OURA_CLIENT_ID;
     if (!clientId) return res.status(503).json({ error: "Oura integration not configured. Set OURA_CLIENT_ID and OURA_CLIENT_SECRET." });
 
-    const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/oura/callback`;
+    const redirectUri = `${getAppBaseUrl(req)}/api/integrations/oura/callback`;
     const state = generateOAuthState("oura");
     const params = new URLSearchParams({
       response_type: "code",
@@ -998,7 +1007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/oura/callback`;
+      const redirectUri = `${getAppBaseUrl(req)}/api/integrations/oura/callback`;
       const params = new URLSearchParams({
         grant_type: "authorization_code",
         code: code as string,
