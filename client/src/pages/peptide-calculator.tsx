@@ -31,6 +31,7 @@ interface CalcResult {
   unitsPerDose: number;
   mlPerDose: number;
   mcgPerUnit: number;
+  concentrationMgMl: number;
 }
 
 interface SavedCalc {
@@ -64,6 +65,7 @@ function calcDoses(
   return peptides.map(p => {
     const desiredMcg = toMcg(p.desiredDose, p.doseUnit);
     const mcgPerMl = bacWaterMl > 0 ? (p.amountMg * 1000) / bacWaterMl : 0;
+    const concentrationMgMl = bacWaterMl > 0 ? p.amountMg / bacWaterMl : 0;
     const mcgPerUnit = mcgPerMl / unitsPerMl;
     const unitsPerDose = mcgPerUnit > 0 ? desiredMcg / mcgPerUnit : 0;
     const mlPerDose = unitsPerMl > 0 ? unitsPerDose / unitsPerMl : 0;
@@ -72,6 +74,7 @@ function calcDoses(
       unitsPerDose: Math.round(unitsPerDose * 10) / 10,
       mlPerDose: Math.round(mlPerDose * 1000) / 1000,
       mcgPerUnit: Math.round(mcgPerUnit * 100) / 100,
+      concentrationMgMl: Math.round(concentrationMgMl * 1000) / 1000,
     };
   });
 }
@@ -463,24 +466,24 @@ function VialCard({
 
             {/* Dosage table */}
             <div className="rounded-xl overflow-hidden border text-xs">
-              <div className="grid grid-cols-3 bg-muted/60 px-3 py-1.5 font-semibold text-muted-foreground">
+              <div className="grid grid-cols-4 bg-muted/60 px-3 py-1.5 font-semibold text-muted-foreground">
                 <span>Peptide</span>
-                <span className="text-center">Units / mL</span>
-                <span className="text-right">mcg/unit</span>
+                <span className="text-center">Units</span>
+                <span className="text-center">Draw</span>
+                <span className="text-right">Conc.</span>
               </div>
               {results.map((r, i) => (
-                <div key={i} className="grid grid-cols-3 px-3 py-1.5 border-t">
-                  <span className="font-medium">{r.pepName}</span>
-                  <span className="text-center font-mono text-primary font-bold">
-                    {r.unitsPerDose}u / {r.mlPerDose} mL
-                  </span>
-                  <span className="text-right text-muted-foreground">{r.mcgPerUnit}</span>
+                <div key={i} className="grid grid-cols-4 px-3 py-1.5 border-t">
+                  <span className="font-medium truncate">{r.pepName}</span>
+                  <span className="text-center font-mono text-primary font-bold">{r.unitsPerDose}u</span>
+                  <span className="text-center font-mono text-foreground">{r.mlPerDose} mL</span>
+                  <span className="text-right text-muted-foreground">{r.concentrationMgMl} mg/mL</span>
                 </div>
               ))}
               {results.length > 1 && (
-                <div className="grid grid-cols-3 px-3 py-1.5 border-t bg-primary/5">
-                  <span className="font-semibold text-foreground">Total draw</span>
-                  <span className="text-center font-mono text-primary font-bold col-span-2 text-left pl-6">
+                <div className="grid grid-cols-4 px-3 py-1.5 border-t bg-primary/5">
+                  <span className="font-semibold text-foreground col-span-2">Total draw</span>
+                  <span className="text-center col-span-2 font-mono text-primary font-bold">
                     {totalMlPerDose} mL
                   </span>
                 </div>
@@ -662,7 +665,7 @@ export default function PeptideCalculator() {
             <FlaskConical size={13} className="mr-1" /> Dosage
           </TabsTrigger>
           <TabsTrigger value="guide" className="flex-1 text-xs">
-            <Info size={13} className="mr-1" /> Guide
+            <FlaskConical size={13} className="mr-1" /> Recon
           </TabsTrigger>
           <TabsTrigger value="saved" className="flex-1 text-xs">
             <BookOpen size={13} className="mr-1" /> My Calcs
@@ -678,8 +681,16 @@ export default function PeptideCalculator() {
           <Card>
             <CardContent className="p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold">Peptides in blend</Label>
-                <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={addPeptide}>
+                <Label className="text-sm font-semibold">
+                  Peptides in blend
+                  <span className="ml-1 text-[10px] text-muted-foreground font-normal">({peptides.length}/4)</span>
+                </Label>
+                <Button
+                  size="sm" variant="outline" className="h-7 text-xs px-2"
+                  onClick={addPeptide}
+                  disabled={peptides.length >= 4}
+                  title={peptides.length >= 4 ? "Maximum 4 peptides per blend" : undefined}
+                >
                   <Plus size={11} className="mr-1" /> Add
                 </Button>
               </div>
@@ -789,24 +800,24 @@ export default function PeptideCalculator() {
                 )}
 
                 {/* Table */}
-                <div className="rounded-xl overflow-hidden border text-sm">
-                  <div className="grid grid-cols-3 bg-primary/10 px-3 py-2 font-semibold text-primary text-xs">
+                <div className="rounded-xl overflow-hidden border text-xs">
+                  <div className="grid grid-cols-4 bg-primary/10 px-3 py-2 font-semibold text-primary">
                     <span>Peptide</span>
-                    <span className="text-center">Units / mL</span>
-                    <span className="text-right">mcg/unit</span>
+                    <span className="text-center">Units</span>
+                    <span className="text-center">Draw</span>
+                    <span className="text-right">Conc.</span>
                   </div>
                   {results.map((r, i) => (
-                    <div key={i} className="grid grid-cols-3 px-3 py-2.5 border-t">
-                      <span className="font-medium text-foreground">{r.pepName}</span>
-                      <span className="text-center font-mono font-bold text-primary">
-                        {r.unitsPerDose}u / {r.mlPerDose} mL
-                      </span>
-                      <span className="text-right text-muted-foreground text-xs">{r.mcgPerUnit} mcg</span>
+                    <div key={i} className="grid grid-cols-4 px-3 py-2.5 border-t">
+                      <span className="font-medium text-foreground truncate">{r.pepName}</span>
+                      <span className="text-center font-mono font-bold text-primary">{r.unitsPerDose}u</span>
+                      <span className="text-center font-mono text-foreground">{r.mlPerDose} mL</span>
+                      <span className="text-right text-muted-foreground">{r.concentrationMgMl} mg/mL</span>
                     </div>
                   ))}
                   {results.length > 1 && (
-                    <div className="grid grid-cols-3 px-3 py-2.5 border-t bg-primary/5">
-                      <span className="font-semibold text-foreground">Total draw</span>
+                    <div className="grid grid-cols-4 px-3 py-2.5 border-t bg-primary/5">
+                      <span className="font-semibold text-foreground col-span-2">Total draw</span>
                       <span className="text-center col-span-2 font-mono font-bold text-primary">
                         {totalMlPerDose} mL
                       </span>

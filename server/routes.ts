@@ -793,9 +793,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) { res.status(400).json({ error: "Invalid data" }); }
   });
 
+  // Helper: resolve a peptide calc by id and assert ownership
+  async function resolvePeptideCalc(id: number, res: import("express").Response) {
+    const calc = await storage.getPeptideCalculation(id);
+    if (!calc) { res.status(404).json({ error: "Not found" }); return null; }
+    if (calc.userId !== currentUserId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return calc;
+  }
+
   app.patch("/api/peptide-calcs/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      if (!await resolvePeptideCalc(id, res)) return;
       const data = peptideCalcSchema.partial().parse(req.body);
       const calc = await storage.updatePeptideCalculation(id, data as Parameters<typeof storage.updatePeptideCalculation>[1]);
       res.json(calc);
@@ -804,28 +813,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/peptide-calcs/:id", async (req, res) => {
     try {
-      await storage.deletePeptideCalculation(parseInt(req.params.id));
+      const id = parseInt(req.params.id);
+      if (!await resolvePeptideCalc(id, res)) return;
+      await storage.deletePeptideCalculation(id);
       res.json({ success: true });
     } catch { res.status(500).json({ error: "Failed to delete" }); }
   });
 
   app.get("/api/peptide-calcs/:id/logs", async (req, res) => {
     try {
-      const logs = await storage.getVialLogs(parseInt(req.params.id));
+      const id = parseInt(req.params.id);
+      if (!await resolvePeptideCalc(id, res)) return;
+      const logs = await storage.getVialLogs(id);
       res.json(logs);
     } catch { res.status(500).json({ error: "Failed to fetch logs" }); }
   });
 
   app.post("/api/peptide-calcs/:id/logs", async (req, res) => {
     try {
-      const log = await storage.createVialLog(parseInt(req.params.id), currentUserId);
+      const id = parseInt(req.params.id);
+      if (!await resolvePeptideCalc(id, res)) return;
+      const log = await storage.createVialLog(id, currentUserId);
       res.json(log);
     } catch { res.status(500).json({ error: "Failed to log dose" }); }
   });
 
   app.delete("/api/peptide-calcs/:id/logs/last", async (req, res) => {
     try {
-      await storage.deleteLastVialLog(parseInt(req.params.id));
+      const id = parseInt(req.params.id);
+      if (!await resolvePeptideCalc(id, res)) return;
+      await storage.deleteLastVialLog(id);
       res.json({ success: true });
     } catch { res.status(500).json({ error: "Failed to undo" }); }
   });
