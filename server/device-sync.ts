@@ -1,6 +1,16 @@
 import { storage } from "./storage";
 import type { Integration } from "@shared/schema";
 
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+// ─── Shared token helpers ─────────────────────────────────────────────────────
+
+function isTokenExpired(integration: Integration): boolean {
+  const settings = integration.settings as { expiresAt?: number } | null;
+  if (!settings?.expiresAt) return false;
+  return Date.now() >= settings.expiresAt - 60_000; // refresh 1 minute early
+}
+
 // ─── Withings ────────────────────────────────────────────────────────────────
 
 const WITHINGS_TOKEN_URL = "https://wbsapi.withings.net/v2/oauth2";
@@ -29,24 +39,30 @@ async function refreshWithingsToken(integration: Integration): Promise<string | 
   const data = await res.json();
   if (data.status !== 0) return null;
 
-  const { access_token, refresh_token } = data.body;
+  const { access_token, refresh_token, expires_in } = data.body;
+  const expiresAt = expires_in ? Date.now() + expires_in * 1000 : undefined;
   await storage.updateIntegration(integration.id, {
     accessToken: access_token,
     refreshToken: refresh_token,
     lastSync: new Date(),
+    settings: { ...(integration.settings as object), expiresAt },
   });
   return access_token;
+}
+
+async function getWithingsToken(integration: Integration): Promise<string | null> {
+  if (!integration.accessToken || isTokenExpired(integration)) {
+    return refreshWithingsToken(integration);
+  }
+  return integration.accessToken;
 }
 
 export async function syncWithingsWeights(userId: number): Promise<{ synced: number; error?: string }> {
   const integration = await storage.getIntegrationByPlatform(userId, "withings");
   if (!integration || !integration.isActive) return { synced: 0, error: "Not connected" };
 
-  let token = integration.accessToken;
-  if (!token) {
-    token = await refreshWithingsToken(integration);
-    if (!token) return { synced: 0, error: "Token refresh failed" };
-  }
+  let token = await getWithingsToken(integration);
+  if (!token) return { synced: 0, error: "Token refresh failed" };
 
   // Fetch last 90 days of weight measurements
   const lastupdate = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
@@ -57,27 +73,28 @@ export async function syncWithingsWeights(userId: number): Promise<{ synced: num
     lastupdate: String(lastupdate),
   });
 
-  const res = await fetch(`${WITHINGS_MEASURE_URL}?${params.toString()}`, {
+  let res = await fetch(`${WITHINGS_MEASURE_URL}?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!res.ok) {
-    // Try token refresh once
+  if (res.status === 401) {
     token = await refreshWithingsToken(integration);
     if (!token) return { synced: 0, error: "Authorization failed" };
-    const retry = await fetch(`${WITHINGS_MEASURE_URL}?${params.toString()}`, {
+    res = await fetch(`${WITHINGS_MEASURE_URL}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!retry.ok) return { synced: 0, error: "API request failed" };
-    const retryData = await retry.json();
-    return await processWithingsData(userId, retryData);
   }
 
+  if (!res.ok) return { synced: 0, error: "API request failed" };
+
   const data = await res.json();
-  return await processWithingsData(userId, data);
+  return processWithingsData(userId, data);
 }
 
-async function processWithingsData(userId: number, data: { status: number; body?: { measuregrps?: { date: number; measures: { value: number; unit: number; type: number }[] }[] } }): Promise<{ synced: number; error?: string }> {
+async function processWithingsData(
+  userId: number,
+  data: { status: number; body?: { measuregrps?: { date: number; measures: { value: number; unit: number; type: number }[] }[] } }
+): Promise<{ synced: number; error?: string }> {
   if (data.status !== 0) return { synced: 0, error: `Withings API error: ${data.status}` };
 
   const groups = data.body?.measuregrps ?? [];
@@ -92,27 +109,38 @@ async function processWithingsData(userId: number, data: { status: number; body?
     const weightLbs = weightKg * 2.20462;
     const date = new Date(grp.date * 1000).toISOString().split("T")[0];
 
-    // Store as health metric
-    const existing = await storage.getHealthMetrics(userId, date);
-    if (existing.length === 0) {
-      await storage.createHealthMetric({
+    // Store as weight-only progress photo entry (no photo URL)
+    const existing = await storage.getProgressPhotos(userId);
+    const alreadyExists = existing.some(p => p.date === date && p.weight != null && p.notes?.includes("Withings"));
+    if (!alreadyExists) {
+      await storage.createProgressPhoto({
         userId,
         date,
         weight: weightLbs,
-        source: "withings",
-        sleepHours: null,
-        mood: null,
-        energy: null,
-        stress: null,
-        heartRate: null,
-        steps: null,
-        rawData: null,
+        photoUrl: null,
+        notes: "Synced from Withings",
       });
       synced++;
     }
   }
 
+  // Update lastSync
+  const integration = await storage.getIntegrationByPlatform(userId, "withings");
+  if (integration) {
+    await storage.updateIntegration(integration.id, { lastSync: new Date() });
+  }
+
   return { synced };
+}
+
+// ─── Auto-sync Withings if stale ───────────────────────────────────────────
+export async function autoSyncWithingsIfStale(userId: number): Promise<boolean> {
+  const integration = await storage.getIntegrationByPlatform(userId, "withings");
+  if (!integration?.isActive || !integration?.accessToken) return false;
+  const lastSync = integration.lastSync ? new Date(integration.lastSync).getTime() : 0;
+  if (Date.now() - lastSync < ONE_HOUR_MS) return false;
+  syncWithingsWeights(userId).catch(console.error); // fire-and-forget
+  return true;
 }
 
 // ─── Oura ─────────────────────────────────────────────────────────────────────
@@ -142,87 +170,142 @@ async function refreshOuraToken(integration: Integration): Promise<string | null
   const data = await res.json();
   if (!data.access_token) return null;
 
+  const expiresAt = data.expires_in ? Date.now() + data.expires_in * 1000 : undefined;
   await storage.updateIntegration(integration.id, {
     accessToken: data.access_token,
     refreshToken: data.refresh_token || integration.refreshToken,
     lastSync: new Date(),
+    settings: { ...(integration.settings as object), expiresAt },
   });
   return data.access_token;
+}
+
+async function getOuraToken(integration: Integration): Promise<string | null> {
+  if (!integration.accessToken || isTokenExpired(integration)) {
+    return refreshOuraToken(integration);
+  }
+  return integration.accessToken;
 }
 
 export async function syncOuraSleep(userId: number): Promise<{ synced: number; error?: string }> {
   const integration = await storage.getIntegrationByPlatform(userId, "oura");
   if (!integration || !integration.isActive) return { synced: 0, error: "Not connected" };
 
-  let token = integration.accessToken;
-  if (!token) {
-    token = await refreshOuraToken(integration);
-    if (!token) return { synced: 0, error: "Token refresh failed" };
-  }
+  let token = await getOuraToken(integration);
+  if (!token) return { synced: 0, error: "Token refresh failed" };
 
   const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const endDate = new Date().toISOString().split("T")[0];
 
-  const headers = { Authorization: `Bearer ${token}` };
+  const makeHeaders = (t: string) => ({ Authorization: `Bearer ${t}` });
 
-  const [sleepRes, readinessRes] = await Promise.all([
-    fetch(`${OURA_API}/daily_sleep?start_date=${startDate}&end_date=${endDate}`, { headers }),
-    fetch(`${OURA_API}/daily_readiness?start_date=${startDate}&end_date=${endDate}`, { headers }),
-  ]);
-
-  if (!sleepRes.ok && !readinessRes.ok) {
-    token = await refreshOuraToken(integration);
-    if (!token) return { synced: 0, error: "Authorization failed" };
-    const newHeaders = { Authorization: `Bearer ${token}` };
-    const [retrySleep, retryReadiness] = await Promise.all([
-      fetch(`${OURA_API}/daily_sleep?start_date=${startDate}&end_date=${endDate}`, { headers: newHeaders }),
-      fetch(`${OURA_API}/daily_readiness?start_date=${startDate}&end_date=${endDate}`, { headers: newHeaders }),
-    ]);
-    return await processOuraData(userId, retrySleep, retryReadiness);
+  async function fetchOura(path: string, tok: string): Promise<Response> {
+    let r = await fetch(`${OURA_API}/${path}?start_date=${startDate}&end_date=${endDate}`, { headers: makeHeaders(tok) });
+    if (r.status === 401) {
+      const refreshed = await refreshOuraToken(integration);
+      if (refreshed) {
+        tok = refreshed;
+        r = await fetch(`${OURA_API}/${path}?start_date=${startDate}&end_date=${endDate}`, { headers: makeHeaders(tok) });
+      }
+    }
+    return r;
   }
 
-  return await processOuraData(userId, sleepRes, readinessRes);
+  const [sleepRes, readinessRes, sessionRes] = await Promise.all([
+    fetchOura("daily_sleep", token),
+    fetchOura("daily_readiness", token),
+    fetchOura("sleep", token), // individual sessions with average_hrv
+  ]);
+
+  return processOuraData(userId, sleepRes, readinessRes, sessionRes);
 }
 
-interface OuraSleepEntry { day: string; score: number | null; contributors?: { deep_sleep?: number; rem_sleep?: number; total_sleep?: number } }
-interface OuraReadinessEntry { day: string; score: number | null; contributors?: { hrv_balance?: number } }
+interface OuraDailySleepEntry {
+  day: string;
+  score: number | null;
+  contributors?: { deep_sleep?: number; rem_sleep?: number; total_sleep?: number };
+}
+interface OuraReadinessEntry {
+  day: string;
+  score: number | null;
+}
+interface OuraSleepSession {
+  day: string;
+  type: string; // "long_sleep" | "short_sleep" | "rest" | "nap"
+  average_hrv: number | null;
+  total_sleep_duration: number | null; // seconds
+  deep_sleep_duration: number | null; // seconds
+  rem_sleep_duration: number | null; // seconds
+}
 
 async function processOuraData(
   userId: number,
   sleepRes: Response,
-  readinessRes: Response
+  readinessRes: Response,
+  sessionRes: Response
 ): Promise<{ synced: number; error?: string }> {
-  let sleepData: { data?: OuraSleepEntry[] } = {};
+  let sleepData: { data?: OuraDailySleepEntry[] } = {};
   let readinessData: { data?: OuraReadinessEntry[] } = {};
+  let sessionData: { data?: OuraSleepSession[] } = {};
 
   if (sleepRes.ok) sleepData = await sleepRes.json();
   if (readinessRes.ok) readinessData = await readinessRes.json();
+  if (sessionRes.ok) sessionData = await sessionRes.json();
 
-  const sleepMap = new Map<string, OuraSleepEntry>();
+  const sleepMap = new Map<string, OuraDailySleepEntry>();
   for (const s of sleepData.data ?? []) sleepMap.set(s.day, s);
 
   const readinessMap = new Map<string, OuraReadinessEntry>();
   for (const r of readinessData.data ?? []) readinessMap.set(r.day, r);
 
-  const allDates = new Set([...sleepMap.keys(), ...readinessMap.keys()]);
+  // Aggregate HRV and durations from session data (take main long_sleep session per day)
+  const sessionMap = new Map<string, OuraSleepSession>();
+  for (const s of sessionData.data ?? []) {
+    if (s.type === "long_sleep") {
+      // Keep the one with highest total_sleep_duration if multiple
+      const existing = sessionMap.get(s.day);
+      if (!existing || (s.total_sleep_duration ?? 0) > (existing.total_sleep_duration ?? 0)) {
+        sessionMap.set(s.day, s);
+      }
+    }
+  }
+
+  const allDates = new Set([...sleepMap.keys(), ...readinessMap.keys(), ...sessionMap.keys()]);
   let synced = 0;
 
   for (const date of allDates) {
-    const sleep = sleepMap.get(date);
+    const daily = sleepMap.get(date);
     const readiness = readinessMap.get(date);
+    const session = sessionMap.get(date);
 
     await storage.upsertOuraDailyLog({
       userId,
       date,
-      sleepScore: sleep?.score ?? null,
+      sleepScore: daily?.score ?? null,
       readinessScore: readiness?.score ?? null,
-      hrv: null,
-      totalSleep: sleep?.contributors?.total_sleep ? Math.round((sleep.contributors.total_sleep * 28800) / 100) : null,
-      deepSleep: sleep?.contributors?.deep_sleep ? Math.round((sleep.contributors.deep_sleep * 28800) / 100) : null,
-      remSleep: sleep?.contributors?.rem_sleep ? Math.round((sleep.contributors.rem_sleep * 28800) / 100) : null,
+      hrv: session?.average_hrv ?? null,
+      totalSleep: session?.total_sleep_duration != null ? Math.round(session.total_sleep_duration / 60) : null,
+      deepSleep: session?.deep_sleep_duration != null ? Math.round(session.deep_sleep_duration / 60) : null,
+      remSleep: session?.rem_sleep_duration != null ? Math.round(session.rem_sleep_duration / 60) : null,
     });
     synced++;
   }
 
+  // Update lastSync
+  const integration = await storage.getIntegrationByPlatform(userId, "oura");
+  if (integration) {
+    await storage.updateIntegration(integration.id, { lastSync: new Date() });
+  }
+
   return { synced };
+}
+
+// ─── Auto-sync Oura if stale ───────────────────────────────────────────────
+export async function autoSyncOuraIfStale(userId: number): Promise<boolean> {
+  const integration = await storage.getIntegrationByPlatform(userId, "oura");
+  if (!integration?.isActive || !integration?.accessToken) return false;
+  const lastSync = integration.lastSync ? new Date(integration.lastSync).getTime() : 0;
+  if (Date.now() - lastSync < ONE_HOUR_MS) return false;
+  syncOuraSleep(userId).catch(console.error); // fire-and-forget
+  return true;
 }

@@ -804,6 +804,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Device Integrations (Withings + Oura) ───────────────────────────────
 
+  // Per-request OAuth state nonces (server-side CSRF protection)
+  // Map of state → { platform, expiresAt }
+  const oauthStates = new Map<string, { platform: string; expiresAt: number }>();
+  function generateOAuthState(platform: string): string {
+    const state = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    oauthStates.set(state, { platform, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5-min TTL
+    // Prune expired states
+    for (const [k, v] of oauthStates) { if (Date.now() > v.expiresAt) oauthStates.delete(k); }
+    return state;
+  }
+  function validateOAuthState(state: string, expectedPlatform: string): boolean {
+    const entry = oauthStates.get(state);
+    if (!entry) return false;
+    oauthStates.delete(state); // single-use
+    return entry.platform === expectedPlatform && Date.now() < entry.expiresAt;
+  }
+
+  // Auto-sync endpoint — called on app load; fires background sync if connected + stale
+  app.post("/api/integrations/auto-sync", async (req, res) => {
+    try {
+      const { autoSyncWithingsIfStale, autoSyncOuraIfStale } = await import("./device-sync");
+      const [withingsSynced, ouraSynced] = await Promise.all([
+        autoSyncWithingsIfStale(currentUserId),
+        autoSyncOuraIfStale(currentUserId),
+      ]);
+      res.json({ withingsSynced, ouraSynced });
+    } catch {
+      res.json({ withingsSynced: false, ouraSynced: false });
+    }
+  });
+
   // Get status of device integrations
   app.get("/api/device-integrations", async (req, res) => {
     try {
@@ -836,7 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!clientId) return res.status(503).json({ error: "Withings integration not configured. Set WITHINGS_CLIENT_ID and WITHINGS_CLIENT_SECRET." });
 
     const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/withings/callback`;
-    const state = Math.random().toString(36).slice(2);
+    const state = generateOAuthState("withings");
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -848,12 +879,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/integrations/withings/callback", async (req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
     const clientId = process.env.WITHINGS_CLIENT_ID;
     const clientSecret = process.env.WITHINGS_CLIENT_SECRET;
 
     if (!code || !clientId || !clientSecret) {
-      return res.redirect("/?error=withings_auth_failed");
+      return res.redirect("/settings?error=withings_auth_failed");
+    }
+    if (!state || !validateOAuthState(state as string, "withings")) {
+      return res.redirect("/settings?error=withings_state_invalid");
     }
 
     try {
@@ -875,14 +909,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tokenData = await tokenRes.json();
 
       if (tokenData.status !== 0) {
-        return res.redirect("/?error=withings_token_failed");
+        return res.redirect("/settings?error=withings_token_failed");
       }
+
+      const expiresAt = tokenData.body.expires_in
+        ? Date.now() + tokenData.body.expires_in * 1000
+        : undefined;
 
       await storage.upsertIntegrationByPlatform(currentUserId, "withings", {
         accessToken: tokenData.body.access_token,
         refreshToken: tokenData.body.refresh_token,
         isActive: true,
         lastSync: new Date(),
+        settings: { expiresAt },
       });
 
       // Trigger initial sync in background
@@ -891,7 +930,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.redirect("/settings?connected=withings");
     } catch {
-      res.redirect("/?error=withings_callback_failed");
+      res.redirect("/settings?error=withings_callback_failed");
     }
   });
 
@@ -920,7 +959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!clientId) return res.status(503).json({ error: "Oura integration not configured. Set OURA_CLIENT_ID and OURA_CLIENT_SECRET." });
 
     const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/oura/callback`;
-    const state = Math.random().toString(36).slice(2);
+    const state = generateOAuthState("oura");
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -932,12 +971,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/integrations/oura/callback", async (req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
     const clientId = process.env.OURA_CLIENT_ID;
     const clientSecret = process.env.OURA_CLIENT_SECRET;
 
     if (!code || !clientId || !clientSecret) {
-      return res.redirect("/?error=oura_auth_failed");
+      return res.redirect("/settings?error=oura_auth_failed");
+    }
+    if (!state || !validateOAuthState(state as string, "oura")) {
+      return res.redirect("/settings?error=oura_state_invalid");
     }
 
     try {
@@ -958,14 +1000,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tokenData = await tokenRes.json();
 
       if (!tokenData.access_token) {
-        return res.redirect("/?error=oura_token_failed");
+        return res.redirect("/settings?error=oura_token_failed");
       }
+
+      const expiresAt = tokenData.expires_in
+        ? Date.now() + tokenData.expires_in * 1000
+        : undefined;
 
       await storage.upsertIntegrationByPlatform(currentUserId, "oura", {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token ?? null,
         isActive: true,
         lastSync: new Date(),
+        settings: { expiresAt },
       });
 
       // Trigger initial sync in background
@@ -974,7 +1021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.redirect("/settings?connected=oura");
     } catch {
-      res.redirect("/?error=oura_callback_failed");
+      res.redirect("/settings?error=oura_callback_failed");
     }
   });
 

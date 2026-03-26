@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { useEffect } from "react";
+import { apiRequest } from "@/lib/queryClient";
 import Dashboard from "@/pages/dashboard";
 import LogShot from "@/pages/log-shot";
 import Journal from "@/pages/journal";
@@ -14,6 +16,13 @@ import Protocols from "@/pages/protocols";
 import PeptideCalculator from "@/pages/peptide-calculator";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
+
+function DeviceSyncTrigger() {
+  useEffect(() => {
+    apiRequest("POST", "/api/integrations/auto-sync", {}).catch(() => {});
+  }, []);
+  return null;
+}
 
 function Router() {
   return (
@@ -50,6 +59,7 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
+          <DeviceSyncTrigger />
           <Router />
         </TooltipProvider>
       </ThemeProvider>

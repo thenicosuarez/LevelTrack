@@ -202,10 +202,18 @@ export default function Analytics() {
     .filter(l => l.date >= startDate && l.date <= endDate)
     .map(l => ({
       date: formatXDate(l.date),
+      rawDate: l.date,
       sleep: l.sleepScore,
       readiness: l.readinessScore,
+      hrv: l.hrv != null ? Math.round(l.hrv) : null,
       totalSleepHrs: l.totalSleep != null ? Math.round(l.totalSleep / 60 * 10) / 10 : null,
+      injectionDay: injectionDates.has(l.date),
     }));
+
+  // Injection-date reference lines for recovery chart (formatted to match X axis)
+  const ouraInjectionLines = ouraChartData
+    .filter(d => d.injectionDay)
+    .map(d => d.date);
 
   // ─── Stats ─────────────────────────────────────────────────────────────────
   const sortedWeights = allWeightEntries.sort((a, b) => a.date.localeCompare(b.date));
@@ -470,7 +478,7 @@ export default function Analytics() {
               <span className="text-sm font-bold text-foreground">Recovery (Oura)</span>
             </div>
             {ouraChartData.length > 0 && (
-              <div className="flex gap-3">
+              <div className="flex gap-2 flex-wrap justify-end">
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                   <span>Sleep</span>
@@ -478,6 +486,10 @@ export default function Analytics() {
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
                   <span>Readiness</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span>HRV</span>
                 </div>
               </div>
             )}
@@ -496,28 +508,39 @@ export default function Analytics() {
               {(() => {
                 const validSleep = ouraChartData.filter(d => d.sleep != null);
                 const validReady = ouraChartData.filter(d => d.readiness != null);
+                const validHrv = ouraChartData.filter(d => d.hrv != null);
                 const avgSleep = validSleep.length > 0
                   ? Math.round(validSleep.reduce((s, d) => s + (d.sleep ?? 0), 0) / validSleep.length)
                   : null;
                 const avgReady = validReady.length > 0
                   ? Math.round(validReady.reduce((s, d) => s + (d.readiness ?? 0), 0) / validReady.length)
                   : null;
+                const avgHrv = validHrv.length > 0
+                  ? Math.round(validHrv.reduce((s, d) => s + (d.hrv ?? 0), 0) / validHrv.length)
+                  : null;
                 const sleepColor = avgSleep != null ? (avgSleep >= 80 ? "text-green-600" : avgSleep >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
                 const readyColor = avgReady != null ? (avgReady >= 80 ? "text-green-600" : avgReady >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
+                const cols = avgHrv != null ? 3 : 2;
                 return (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={`grid grid-cols-${cols} gap-2`}>
                     <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-2.5 text-center">
                       <p className={`text-lg font-bold ${sleepColor}`}>{avgSleep ?? "—"}</p>
-                      <p className="text-[10px] text-muted-foreground">avg sleep score</p>
+                      <p className="text-[10px] text-muted-foreground">avg sleep</p>
                     </div>
                     <div className="bg-teal-50 dark:bg-teal-950/30 rounded-xl p-2.5 text-center">
                       <p className={`text-lg font-bold ${readyColor}`}>{avgReady ?? "—"}</p>
-                      <p className="text-[10px] text-muted-foreground">avg readiness</p>
+                      <p className="text-[10px] text-muted-foreground">readiness</p>
                     </div>
+                    {avgHrv != null && (
+                      <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-2.5 text-center">
+                        <p className="text-lg font-bold text-amber-600">{avgHrv}<span className="text-xs font-normal">ms</span></p>
+                        <p className="text-[10px] text-muted-foreground">avg HRV</p>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
-              <ResponsiveContainer width="100%" height={150}>
+              <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={ouraChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
@@ -525,11 +548,31 @@ export default function Analytics() {
                   <Tooltip
                     contentStyle={{ fontSize: 11, borderRadius: 10, border: "1px solid #e5e7eb" }}
                     labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                    formatter={(val, name) => [
+                      name === "HRV" ? `${val} ms` : `${val}/100`,
+                      name,
+                    ]}
                   />
-                  <Line type="monotone" dataKey="sleep" name="Sleep Score" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
+                  {ouraInjectionLines.map(date => (
+                    <ReferenceLine
+                      key={`oura-inj-${date}`}
+                      x={date}
+                      stroke="#0d9488"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                    />
+                  ))}
+                  <Line type="monotone" dataKey="sleep" name="Sleep" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
                   <Line type="monotone" dataKey="readiness" name="Readiness" stroke="#0d9488" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="hrv" name="HRV" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
+              {ouraInjectionLines.length > 0 && (
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <div className="w-3 border-t border-dashed border-teal-500" />
+                  <span>Injection day</span>
+                </div>
+              )}
             </>
           )}
         </CardContent>
