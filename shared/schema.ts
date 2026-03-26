@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -199,7 +199,9 @@ export const ouraDailyLogs = pgTable("oura_daily_logs", {
   deepSleep: integer("deep_sleep"), // deep sleep in minutes
   remSleep: integer("rem_sleep"), // REM sleep in minutes
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  userDateUniq: unique().on(table.userId, table.date),
+}));
 
 // ─── Peptide Calculator Tables ─────────────────────────────────────────────
 
