@@ -540,10 +540,11 @@ export default function Analytics() {
                 );
               })()}
               <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={ouraChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <LineChart data={ouraChartData} margin={{ top: 5, right: 30, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="score" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="hrv" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip
                     contentStyle={{ fontSize: 11, borderRadius: 10, border: "1px solid #e5e7eb" }}
                     labelStyle={{ fontSize: 11, fontWeight: 600 }}
@@ -556,14 +557,15 @@ export default function Analytics() {
                     <ReferenceLine
                       key={`oura-inj-${date}`}
                       x={date}
+                      yAxisId="score"
                       stroke="#0d9488"
                       strokeWidth={1.5}
                       strokeDasharray="4 3"
                     />
                   ))}
-                  <Line type="monotone" dataKey="sleep" name="Sleep" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="readiness" name="Readiness" stroke="#0d9488" strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="hrv" name="HRV" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="score" type="monotone" dataKey="sleep" name="Sleep" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="score" type="monotone" dataKey="readiness" name="Readiness" stroke="#0d9488" strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="hrv" type="monotone" dataKey="hrv" name="HRV" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
               {ouraInjectionLines.length > 0 && (
