@@ -761,16 +761,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )).sort().reverse(); // most recent first
 
         let streak = 0;
-        const today = new Date().toISOString().split("T")[0];
-        let expected = today;
-        for (const d of logDates) {
-          if (d === expected) {
-            streak++;
-            const prev = new Date(expected);
-            prev.setDate(prev.getDate() - 1);
-            expected = prev.toISOString().split("T")[0];
-          } else if (d < expected) {
-            break;
+        // Anchor streak on the most recent logged date (not today),
+        // so non-daily schedules still accumulate consecutive-day streaks.
+        if (logDates.length > 0) {
+          let expected = logDates[0]; // most recent log date
+          for (const d of logDates) {
+            if (d === expected) {
+              streak++;
+              const prev = new Date(expected);
+              prev.setDate(prev.getDate() - 1);
+              expected = prev.toISOString().split("T")[0];
+            } else if (d < expected) {
+              break;
+            }
           }
         }
 

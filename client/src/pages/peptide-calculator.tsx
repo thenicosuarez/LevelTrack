@@ -413,12 +413,12 @@ function VialCard({
               <p className="font-semibold text-foreground truncate">{calc.name}</p>
               {isLow && (
                 <Badge className="text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/40 font-semibold shrink-0">
-                  <AlertTriangle size={9} className="mr-0.5" /> Reorder
+                  <AlertTriangle size={9} className="mr-0.5" /> Reorder soon
                 </Badge>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {calc.peptides.map(p => p.name).join(" + ")} · {calc.bacWaterMl} mL BAC · {calc.syringeType}
+              {calc.peptides.map(p => `${p.name} ${p.amountMg}mg`).join(" + ")} · {calc.bacWaterMl} mL BAC · {calc.syringeType}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -654,7 +654,7 @@ export default function PeptideCalculator() {
         </div>
         {lowStockCount > 0 && (
           <Badge className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/40 font-semibold">
-            <AlertTriangle size={10} className="mr-1" /> {lowStockCount} low
+            <AlertTriangle size={10} className="mr-1" /> {lowStockCount} reorder soon
           </Badge>
         )}
       </div>
