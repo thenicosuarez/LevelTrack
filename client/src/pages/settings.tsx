@@ -111,10 +111,12 @@ export default function Settings() {
     try {
       const res = await apiRequest("POST", `/api/integrations/${device}/sync`, {});
       const data = await res.json();
-      if (data.synced !== undefined) {
-        toast({ title: `${device === "withings" ? "Withings" : "Oura"} synced`, description: `${data.synced} new records imported.` });
+      if (data.error) {
+        toast({ title: "Sync issue", description: data.error, variant: "destructive" });
+      } else if (data.synced !== undefined) {
+        toast({ title: `${device === "withings" ? "Withings" : "Oura"} synced`, description: `${data.synced} new record${data.synced === 1 ? "" : "s"} imported.` });
       } else {
-        toast({ title: "Sync issue", description: data.error ?? "Unknown error", variant: "destructive" });
+        toast({ title: "Sync issue", description: "Unknown error", variant: "destructive" });
       }
       refetchDevices();
       if (device === "withings") {

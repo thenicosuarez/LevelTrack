@@ -248,6 +248,12 @@ async function processOuraData(
     }
   }
 
+  // Only advance lastSync if at least one upstream API succeeded
+  const anySuccess = sleepRes.ok || readinessRes.ok || sessionRes.ok;
+  if (!anySuccess) {
+    return { synced: 0, error: "All Oura API endpoints failed" };
+  }
+
   const allDates = new Set([...sleepMap.keys(), ...readinessMap.keys(), ...sessionMap.keys()]);
   let synced = 0;
 
@@ -269,7 +275,7 @@ async function processOuraData(
     synced++;
   }
 
-  // Update lastSync
+  // Only advance lastSync after successful data persistence
   const integration = await storage.getIntegrationByPlatform(userId, "oura");
   if (integration) {
     await storage.updateIntegration(integration.id, { lastSync: new Date() });
