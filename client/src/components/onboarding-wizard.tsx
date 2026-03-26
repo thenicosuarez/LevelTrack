@@ -27,7 +27,8 @@ const step1Schema = z.object({
 });
 
 const step2Schema = z.object({
-  glp1InjectionDay: z.string().refine((v) => v !== NONE, "Please select a day"),
+  glp1InjectionFrequency: z.enum(["daily", "weekly", "biweekly"]),
+  glp1InjectionDay: z.string(),
   glp1StartDate: z.string().optional(),
 });
 
@@ -70,8 +71,9 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
   const form2 = useForm<Step2>({
     resolver: zodResolver(step2Schema),
-    defaultValues: { glp1InjectionDay: NONE, glp1StartDate: "" },
+    defaultValues: { glp1InjectionFrequency: "weekly", glp1InjectionDay: NONE, glp1StartDate: "" },
   });
+  const watchedFrequency = form2.watch("glp1InjectionFrequency");
 
   const form3 = useForm<Step3>({
     resolver: zodResolver(step3Schema),
@@ -92,7 +94,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
         glp1Drug: data.s1.glp1Drug,
         glp1Dose: parseFloat(data.s1.glp1Dose),
         glp1DoseUnit: data.s1.glp1DoseUnit,
-        glp1InjectionDay: data.s2.glp1InjectionDay !== NONE ? data.s2.glp1InjectionDay : null,
+        glp1InjectionFrequency: data.s2.glp1InjectionFrequency,
+        glp1InjectionDay: data.s2.glp1InjectionFrequency === "daily"
+          ? null
+          : (data.s2.glp1InjectionDay !== NONE ? data.s2.glp1InjectionDay : null),
         glp1StartDate: data.s2.glp1StartDate || null,
         weightUnit: data.s3.weightUnit,
         goalWeight: goalLbs,
@@ -245,10 +250,41 @@ export default function OnboardingWizard({ onComplete }: Props) {
             </Form>
           )}
 
-          {/* Step 2: Injection day */}
+          {/* Step 2: Injection schedule */}
           {step === 1 && (
             <Form {...form2}>
               <form className="space-y-4">
+                <FormField
+                  control={form2.control}
+                  name="glp1InjectionFrequency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">Frequency</FormLabel>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { value: "daily", label: "Daily" },
+                          { value: "weekly", label: "Weekly" },
+                          { value: "biweekly", label: "Bi-weekly" },
+                        ] as const).map(({ value, label }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => field.onChange(value)}
+                            className={`h-10 rounded-lg text-sm font-medium transition-colors ${
+                              field.value === value
+                                ? "gradient-primary text-white shadow"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {watchedFrequency !== "daily" && (
                 <FormField
                   control={form2.control}
                   name="glp1InjectionDay"
@@ -275,6 +311,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                     </FormItem>
                   )}
                 />
+                )}
                 <FormField
                   control={form2.control}
                   name="glp1StartDate"
