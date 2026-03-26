@@ -1,5 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
+import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
 import { z } from "zod";
@@ -817,7 +818,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Map of state → { platform, expiresAt }
   const oauthStates = new Map<string, { platform: string; expiresAt: number }>();
   function generateOAuthState(platform: string): string {
-    const state = require("crypto").randomBytes(24).toString("hex");
+    const state = randomBytes(24).toString("hex");
     oauthStates.set(state, { platform, expiresAt: Date.now() + 5 * 60 * 1000 }); // 5-min TTL
     // Prune expired states
     for (const [k, v] of oauthStates) { if (Date.now() > v.expiresAt) oauthStates.delete(k); }
