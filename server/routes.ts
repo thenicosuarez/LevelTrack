@@ -752,7 +752,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const calcs = await storage.getPeptideCalculations(currentUserId);
       const withLogs = await Promise.all(calcs.map(async (calc) => {
         const logs = await storage.getVialLogs(calc.id);
-        return { ...calc, logCount: logs.length, lastLoggedAt: logs[0]?.loggedAt ?? null };
+
+        // Compute true consecutive-day streak from loggedAt timestamps
+        const logDates = Array.from(new Set(
+          logs
+            .filter(l => l.loggedAt != null)
+            .map(l => new Date(l.loggedAt!).toISOString().split("T")[0])
+        )).sort().reverse(); // most recent first
+
+        let streak = 0;
+        const today = new Date().toISOString().split("T")[0];
+        let expected = today;
+        for (const d of logDates) {
+          if (d === expected) {
+            streak++;
+            const prev = new Date(expected);
+            prev.setDate(prev.getDate() - 1);
+            expected = prev.toISOString().split("T")[0];
+          } else if (d < expected) {
+            break;
+          }
+        }
+
+        return {
+          ...calc,
+          logCount: logs.length,
+          lastLoggedAt: logs[0]?.loggedAt ?? null,
+          streak,
+        };
       }));
       res.json(withLogs);
     } catch { res.status(500).json({ error: "Failed to fetch peptide calculations" }); }
