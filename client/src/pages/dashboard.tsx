@@ -2,15 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle, ChevronRight, Activity, Target } from "lucide-react";
+import { Syringe, CheckCircle2, Circle, TrendingDown, TrendingUp, Flame, AlertCircle, ChevronRight, Activity, Target } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
-import { formatWeight, convertWeight, kgToLbs } from "@/lib/weight-utils";
+import { formatWeight, convertWeight } from "@/lib/weight-utils";
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import type { User, Task, ProtocolItem, Protocol, Glp1Log } from "@shared/schema";
+import type { User, Task, ProtocolItem, Protocol, Glp1Log, ProgressPhoto } from "@shared/schema";
 import OnboardingWizard from "@/components/onboarding-wizard";
 
 interface DashboardData {
@@ -113,10 +113,18 @@ function ProgressRing({ percent, label }: { percent: number; label: string }) {
 }
 
 // Pharmacokinetic medication levels chart
+const MED_TABS = [
+  { label: "7d", days: 7 },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+] as const;
+
 function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null | undefined }) {
+  const [tabIdx, setTabIdx] = useState(1); // default 30d
+  const days = MED_TABS[tabIdx].days;
+
   const chartData = useMemo(() => {
     const halfLife = drug?.toLowerCase().includes("tirzepatide") ? 5 : 7; // days
-    const days = 60;
     const today = new Date();
     const data: { date: string; level: number }[] = [];
     for (let i = days; i >= 0; i--) {
@@ -134,9 +142,10 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
       data.push({ date: dayStr.slice(5), level: Math.round(level * 100) / 100 });
     }
     return data;
-  }, [logs, drug]);
+  }, [logs, drug, days]);
 
   const hasData = logs.length > 0;
+  const tickInterval = days <= 7 ? 1 : days <= 30 ? 6 : 14;
 
   return (
     <Card>
@@ -146,7 +155,21 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
             <Activity size={14} className="text-primary" />
             <span className="text-sm font-bold text-foreground">Medication Levels</span>
           </div>
-          <span className="text-[10px] text-muted-foreground">Est. concentration (60 days)</span>
+          <div className="flex gap-1">
+            {MED_TABS.map((t, i) => (
+              <button
+                key={t.label}
+                onClick={() => setTabIdx(i)}
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
+                  tabIdx === i
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
         {hasData ? (
           <ResponsiveContainer width="100%" height={100}>
@@ -157,7 +180,7 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
                   <stop offset="95%" stopColor="hsl(247,72%,55%)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="date" tick={{ fontSize: 9 }} interval={14} tickLine={false} axisLine={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9 }} interval={tickInterval} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{ fontSize: 11, padding: "4px 8px" }}
@@ -206,6 +229,7 @@ export default function Dashboard() {
   const { data: user } = useQuery<User>({ queryKey: ['/api/user'] });
   const { data: dashboardData, isLoading } = useQuery<DashboardData>({ queryKey: ['/api/analytics/dashboard'] });
   const { data: glp1Logs = [] } = useQuery<Glp1Log[]>({ queryKey: ['/api/glp1-logs'] });
+  const { data: progressPhotos = [] } = useQuery<ProgressPhoto[]>({ queryKey: ['/api/progress-photos'] });
 
   const { data: todayTasks = [] } = useQuery<Task[]>({
     queryKey: ['/api/tasks', { date: today }],
@@ -303,6 +327,31 @@ export default function Dashboard() {
     ? convertWeight(dashboardData.totalWeightLost, weightUnit)
     : null;
 
+  // Rate/week: average weight change over last 4 weigh-ins
+  const ratePerWeek = useMemo(() => {
+    const withWeight = progressPhotos
+      .filter((p) => p.weight != null)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (withWeight.length < 2) return null;
+    const last4 = withWeight.slice(-4);
+    const oldest = last4[0];
+    const newest = last4[last4.length - 1];
+    const days = (new Date(newest.date).getTime() - new Date(oldest.date).getTime()) / (1000 * 60 * 60 * 24);
+    if (days <= 0) return null;
+    const totalChange = (newest.weight! - oldest.weight!); // positive = gained
+    const perWeek = (totalChange / days) * 7;
+    return convertWeight(perWeek, weightUnit);
+  }, [progressPhotos, weightUnit]);
+
+  // Week streak display — show weeks when >= 7 days
+  const streakValue = user?.streak ?? 0;
+  const streakDisplay = streakValue >= 7
+    ? `${Math.floor(streakValue / 7)}wk`
+    : `${streakValue}d`;
+  const streakLabel = streakValue >= 7
+    ? `${Math.floor(streakValue / 7)} week streak`
+    : `${streakValue} day streak`;
+
   const hasGlp1Setup = !!user?.glp1Drug;
 
   const getGreeting = () => {
@@ -329,9 +378,12 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">{getGreeting()},</p>
             <h2 className="text-xl font-bold text-foreground leading-tight">{user?.name || "there"}</h2>
           </div>
-          <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5">
+          <div
+            className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5"
+            title={streakLabel}
+          >
             <Flame size={14} className="text-amber-500" />
-            <span className="text-xs font-bold text-amber-700">{user?.streak || 0} streak</span>
+            <span className="text-xs font-bold text-amber-700">{streakDisplay} streak</span>
           </div>
         </div>
 
@@ -438,10 +490,19 @@ export default function Dashboard() {
           </Card>
           <Card className="cursor-pointer active:scale-95 transition-transform" onClick={() => setLocation("/analytics")}>
             <CardContent className="p-2.5 text-center">
-              <div className="text-base font-bold text-foreground">
-                {dashboardData?.weekCompliance ?? 0}%
+              {ratePerWeek != null ? (
+                <div className={`text-base font-bold flex items-center justify-center gap-0.5 ${ratePerWeek < 0 ? "text-green-500" : "text-red-400"}`}>
+                  {ratePerWeek < 0
+                    ? <TrendingDown size={12} />
+                    : <TrendingUp size={12} />}
+                  {Math.abs(ratePerWeek).toFixed(1)}
+                </div>
+              ) : (
+                <div className="text-base font-bold text-muted-foreground">—</div>
+              )}
+              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">
+                {weightUnit}/wk
               </div>
-              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">This wk</div>
             </CardContent>
           </Card>
         </div>

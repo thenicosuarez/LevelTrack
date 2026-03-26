@@ -36,6 +36,7 @@ const step3Schema = z.object({
   weight: z.string().optional(),
   weightUnit: z.enum(["lbs", "kg"]),
   goalWeight: z.string().optional(),
+  heightCm: z.string().optional(),
 });
 
 type Step1 = z.infer<typeof step1Schema>;
@@ -77,7 +78,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
   const form3 = useForm<Step3>({
     resolver: zodResolver(step3Schema),
-    defaultValues: { weight: "", weightUnit, goalWeight: "" },
+    defaultValues: { weight: "", weightUnit, goalWeight: "", heightCm: "" },
   });
 
   const selectedDrug = drugs.find((d) => d.name === form1.watch("glp1Drug"));
@@ -90,6 +91,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
       const weightLbs = rawWeight != null && isKg ? kgToLbs(rawWeight) : rawWeight;
       const goalLbs = rawGoal != null && isKg ? kgToLbs(rawGoal) : rawGoal;
 
+      const heightCmVal = data.s3.heightCm ? parseInt(data.s3.heightCm) : null;
       await apiRequest("PATCH", "/api/user/settings", {
         glp1Drug: data.s1.glp1Drug,
         glp1Dose: parseFloat(data.s1.glp1Dose),
@@ -101,6 +103,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
         glp1StartDate: data.s2.glp1StartDate || null,
         weightUnit: data.s3.weightUnit,
         goalWeight: goalLbs,
+        heightCm: heightCmVal,
         hasCompletedOnboarding: true,
       });
 
@@ -410,8 +413,30 @@ export default function OnboardingWizard({ onComplete }: Props) {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form3.control}
+                  name="heightCm"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">
+                        Height (cm) — optional, for BMI
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="1"
+                          min="0"
+                          placeholder="e.g. 175"
+                          className="h-11"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <p className="text-xs text-muted-foreground">
-                  This creates your first progress entry and appears as a goal line in analytics.
+                  Weight creates your first progress entry and appears on analytics. Height is used to calculate BMI on your dashboard.
                 </p>
               </form>
             </Form>

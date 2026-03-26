@@ -43,9 +43,11 @@ Preferred communication style: Simple, everyday language.
 ### March 2026 - Dashboard Gamification, Peptide Calculator, Dark Mode, Analytics Upgrade (Tasks #7–10)
 - **Dashboard completely rebuilt** with gamified hero:
   - SVG semicircle injection gauge (shows cycle progress: green→yellow→orange→red as due date approaches)
-  - Pharmacokinetic medication levels chart (AreaChart computing exponential decay of drug concentration)
+  - Pharmacokinetic medication levels chart (AreaChart computing exponential decay of drug concentration, with 7d/30d/90d time tabs)
   - Weight hero card with total weight lost + SVG progress ring showing % toward goal weight
-  - 4-column stats row: Adherence, Total Shots, BMI (when height set), Weekly compliance
+  - 4-column stats row: Adherence, Total Shots, BMI (when height set), Rate/Week (avg weight change over last 4 weigh-ins)
+  - Streak badge shows weeks when ≥ 7 days (e.g. "1wk streak"), days otherwise
+  - Height field added to onboarding step 3 for immediate BMI calculation
 - **Peptide Calculator page** (`/calculate`, new bottom nav tab):
   - Multi-peptide blend builder with vial size + desired dose inputs
   - BAC water volume + syringe type (U-100/U-40) selector
