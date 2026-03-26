@@ -231,7 +231,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!onboardingChecked && user !== undefined) {
       setOnboardingChecked(true);
-      if (!user?.hasCompletedOnboarding) setShowOnboarding(true);
+      // Show onboarding if not completed OR if GLP-1 settings are missing
+      const missingGlp1 = !user?.glp1Drug || !user?.glp1InjectionFrequency;
+      if (!user?.hasCompletedOnboarding || missingGlp1) {
+        setShowOnboarding(true);
+      }
     }
   }, [user, onboardingChecked]);
 
