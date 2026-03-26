@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/lib/theme-provider";
 import Dashboard from "@/pages/dashboard";
 import LogShot from "@/pages/log-shot";
 import Journal from "@/pages/journal";
@@ -10,6 +11,7 @@ import Progress from "@/pages/progress";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Protocols from "@/pages/protocols";
+import PeptideCalculator from "@/pages/peptide-calculator";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
 
@@ -25,6 +27,7 @@ function Router() {
           <Route path="/progress" component={Progress} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/protocols" component={Protocols} />
+          <Route path="/calculate" component={PeptideCalculator} />
           <Route path="/settings" component={Settings} />
           <Route path="/profile">
             <Redirect to="/settings" />
@@ -44,10 +47,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

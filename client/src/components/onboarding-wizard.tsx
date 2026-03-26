@@ -388,7 +388,11 @@ export default function OnboardingWizard({ onComplete }: Props) {
               <Button
                 variant="ghost"
                 className="flex-1 h-11 text-muted-foreground"
-                onClick={onComplete}
+                onClick={async () => {
+                  await apiRequest("PATCH", "/api/user/settings", { hasCompletedOnboarding: true });
+                  queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+                  onComplete();
+                }}
               >
                 Skip setup
               </Button>

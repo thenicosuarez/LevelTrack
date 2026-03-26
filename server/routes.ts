@@ -40,6 +40,21 @@ const updateUserSettingsSchema = z.object({
   hasCompletedOnboarding: z.boolean().optional(),
   reminderEnabled: z.boolean().optional(),
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  heightCm: z.number().positive().optional().nullable(),
+  theme: z.enum(["light", "dark", "system"]).optional(),
+});
+
+const peptideCalcSchema = z.object({
+  name: z.string().min(1),
+  peptides: z.array(z.object({
+    name: z.string(),
+    amountMg: z.number().positive(),
+    desiredDoseMcg: z.number().positive(),
+  })).min(1),
+  bacWaterMl: z.number().positive(),
+  syringeType: z.enum(["U-100", "U-40"]).default("U-100"),
+  injectionSchedule: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 // Curated GLP-1 and peptide drug list
@@ -725,6 +740,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Peptide Calculator routes ────────────────────────────────────────────
+  app.get("/api/peptide-calcs", async (req, res) => {
+    try {
+      const calcs = await storage.getPeptideCalculations(currentUserId);
+      const withLogs = await Promise.all(calcs.map(async (calc) => {
+        const logs = await storage.getVialLogs(calc.id);
+        return { ...calc, logCount: logs.length, lastLoggedAt: logs[0]?.loggedAt ?? null };
+      }));
+      res.json(withLogs);
+    } catch { res.status(500).json({ error: "Failed to fetch peptide calculations" }); }
+  });
+
+  app.post("/api/peptide-calcs", async (req, res) => {
+    try {
+      const data = peptideCalcSchema.parse(req.body);
+      const calc = await storage.createPeptideCalculation({ ...data, userId: currentUserId });
+      res.json(calc);
+    } catch (e) { res.status(400).json({ error: "Invalid data" }); }
+  });
+
+  app.patch("/api/peptide-calcs/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = peptideCalcSchema.partial().parse(req.body);
+      const calc = await storage.updatePeptideCalculation(id, data as Parameters<typeof storage.updatePeptideCalculation>[1]);
+      res.json(calc);
+    } catch { res.status(400).json({ error: "Failed to update" }); }
+  });
+
+  app.delete("/api/peptide-calcs/:id", async (req, res) => {
+    try {
+      await storage.deletePeptideCalculation(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch { res.status(500).json({ error: "Failed to delete" }); }
+  });
+
+  app.get("/api/peptide-calcs/:id/logs", async (req, res) => {
+    try {
+      const logs = await storage.getVialLogs(parseInt(req.params.id));
+      res.json(logs);
+    } catch { res.status(500).json({ error: "Failed to fetch logs" }); }
+  });
+
+  app.post("/api/peptide-calcs/:id/logs", async (req, res) => {
+    try {
+      const log = await storage.createVialLog(parseInt(req.params.id), currentUserId);
+      res.json(log);
+    } catch { res.status(500).json({ error: "Failed to log dose" }); }
+  });
+
+  app.delete("/api/peptide-calcs/:id/logs/last", async (req, res) => {
+    try {
+      await storage.deleteLastVialLog(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch { res.status(500).json({ error: "Failed to undo" }); }
+  });
+
   // ─── Debug endpoints ──────────────────────────────────────────────────────
   app.get("/api/debug/db-test", async (req, res) => {
     try {
@@ -737,4 +809,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+// ─── Reminder Scheduler ────────────────────────────────────────────────────
+// Runs every minute and sends push notifications to users whose reminderTime
+// matches the current HH:MM, have reminders enabled, and it's their injection day.
+// Uses a set to track which user/date combos have already been notified today.
+const notifiedToday = new Set<string>();
+
+export function startReminderScheduler(): void {
+  const tick = async () => {
+    try {
+      const now = new Date();
+      const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const today = now.toISOString().split("T")[0];
+
+      // Reset the dedup set each day
+      const dayPrefix = `${today}:`;
+      for (const key of notifiedToday) {
+        if (!key.startsWith(dayPrefix)) notifiedToday.delete(key);
+      }
+
+      // For demo: only user #1. In production, iterate all users.
+      const user = await storage.getUser(1);
+      if (!user) return;
+      if (!user.reminderEnabled) return;
+      if (!user.reminderTime || user.reminderTime !== currentHHMM) return;
+      if (!isInjectionDayToday(user.glp1InjectionDay)) return;
+
+      const dedupKey = `${today}:${user.id}`;
+      if (notifiedToday.has(dedupKey)) return;
+      notifiedToday.add(dedupKey);
+
+      const subs = await storage.getPushSubscriptions(user.id);
+      if (subs.length === 0) return;
+
+      const drugName = user.glp1Drug ?? "GLP-1";
+      const payload = JSON.stringify({
+        title: "LevelTrack — Shot Day!",
+        body: `Time for your ${drugName} injection 💉 Tap to log it.`,
+        icon: "/icon.svg",
+        url: "/log-shot",
+      });
+
+      await Promise.allSettled(
+        subs.map((sub) =>
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          ).catch(() => {}) // swallow individual failures gracefully
+        )
+      );
+    } catch {
+      // scheduler errors should never crash the process
+    }
+  };
+
+  // Run immediately then every 60 seconds
+  tick();
+  setInterval(tick, 60_000);
 }

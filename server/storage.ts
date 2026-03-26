@@ -1,6 +1,7 @@
 import { 
   users, protocols, protocolItems, tasks, healthMetrics, integrations, voiceNotes,
   glp1Logs, sideEffectLogs, progressPhotos, pushSubscriptions,
+  peptideCalculations, vialLogs,
   type User, type InsertUser, type Protocol, type InsertProtocol,
   type ProtocolItem, type InsertProtocolItem, type Task, type InsertTask,
   type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration,
@@ -9,6 +10,8 @@ import {
   type SideEffectLog, type InsertSideEffectLog,
   type ProgressPhoto, type InsertProgressPhoto,
   type PushSubscription, type InsertPushSubscription,
+  type PeptideCalculation, type InsertPeptideCalculation,
+  type VialLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
@@ -84,6 +87,18 @@ export interface IStorage {
   upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
   deletePushSubscription(endpoint: string): Promise<void>;
   getAllPushSubscriptions(): Promise<PushSubscription[]>;
+
+  // Peptide Calculations
+  getPeptideCalculations(userId: number): Promise<PeptideCalculation[]>;
+  getPeptideCalculation(id: number): Promise<PeptideCalculation | undefined>;
+  createPeptideCalculation(calc: InsertPeptideCalculation): Promise<PeptideCalculation>;
+  updatePeptideCalculation(id: number, calc: Partial<PeptideCalculation>): Promise<PeptideCalculation>;
+  deletePeptideCalculation(id: number): Promise<void>;
+
+  // Vial Logs
+  getVialLogs(calculationId: number): Promise<VialLog[]>;
+  createVialLog(calculationId: number, userId: number): Promise<VialLog>;
+  deleteLastVialLog(calculationId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -399,6 +414,56 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPushSubscriptions(): Promise<PushSubscription[]> {
     return db.select().from(pushSubscriptions);
+  }
+
+  // Peptide Calculations
+  async getPeptideCalculations(userId: number): Promise<PeptideCalculation[]> {
+    return db.select().from(peptideCalculations)
+      .where(eq(peptideCalculations.userId, userId))
+      .orderBy(desc(peptideCalculations.createdAt));
+  }
+
+  async getPeptideCalculation(id: number): Promise<PeptideCalculation | undefined> {
+    const [calc] = await db.select().from(peptideCalculations).where(eq(peptideCalculations.id, id));
+    return calc || undefined;
+  }
+
+  async createPeptideCalculation(calc: InsertPeptideCalculation): Promise<PeptideCalculation> {
+    const [created] = await db.insert(peptideCalculations).values(calc).returning();
+    return created;
+  }
+
+  async updatePeptideCalculation(id: number, updates: Partial<PeptideCalculation>): Promise<PeptideCalculation> {
+    const [updated] = await db.update(peptideCalculations).set(updates).where(eq(peptideCalculations.id, id)).returning();
+    if (!updated) throw new Error("Peptide calculation not found");
+    return updated;
+  }
+
+  async deletePeptideCalculation(id: number): Promise<void> {
+    await db.delete(vialLogs).where(eq(vialLogs.calculationId, id));
+    await db.delete(peptideCalculations).where(eq(peptideCalculations.id, id));
+  }
+
+  // Vial Logs
+  async getVialLogs(calculationId: number): Promise<VialLog[]> {
+    return db.select().from(vialLogs)
+      .where(eq(vialLogs.calculationId, calculationId))
+      .orderBy(desc(vialLogs.loggedAt));
+  }
+
+  async createVialLog(calculationId: number, userId: number): Promise<VialLog> {
+    const [log] = await db.insert(vialLogs).values({ calculationId, userId }).returning();
+    return log;
+  }
+
+  async deleteLastVialLog(calculationId: number): Promise<void> {
+    const logs = await db.select().from(vialLogs)
+      .where(eq(vialLogs.calculationId, calculationId))
+      .orderBy(desc(vialLogs.loggedAt))
+      .limit(1);
+    if (logs.length > 0) {
+      await db.delete(vialLogs).where(eq(vialLogs.id, logs[0].id));
+    }
   }
 }
 

@@ -52,10 +52,16 @@ function AdherenceRing({ pct }: { pct: number }) {
   );
 }
 
-const CustomDot = (props: DotProps) => {
-  const { cx, cy } = props;
+const CustomDot = (props: DotProps & { payload?: { injectionDay?: boolean } }) => {
+  const { cx, cy, payload } = props;
   if (cx == null || cy == null) return null;
-  return <circle cx={cx} cy={cy} r={4} fill="#3D27CC" stroke="#fff" strokeWidth={2} />;
+  const isInjection = payload?.injectionDay;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={isInjection ? 6 : 4} fill={isInjection ? "#0d9488" : "#3D27CC"} stroke="#fff" strokeWidth={2} />
+      {isInjection && <circle cx={cx} cy={cy} r={9} fill="#0d9488" fillOpacity={0.2} />}
+    </g>
+  );
 };
 
 function makeWeightTooltip(unit: string) {
@@ -140,15 +146,18 @@ export default function Analytics() {
 
   const weightUnit = user?.weightUnit ?? "lbs";
 
-  const weightChartData = allWeightEntries.map((e) => ({
-    date: formatXDate(e.date),
-    weight: convertWeight(e.weight, weightUnit),
-  }));
-
   // ─── Dose timeline ─────────────────────────────────────────────────────────
   const filteredLogs = glp1Logs
     .filter((l) => l.date >= startDate && l.date <= endDate)
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  const injectionDates = new Set(filteredLogs.map((l) => l.date));
+
+  const weightChartData = allWeightEntries.map((e) => ({
+    date: formatXDate(e.date),
+    weight: convertWeight(e.weight, weightUnit),
+    injectionDay: injectionDates.has(e.date),
+  }));
 
   const doseData = filteredLogs.map((l) => ({
     date: formatXDate(l.date),
@@ -298,6 +307,12 @@ export default function Analytics() {
           ) : (
             <>
               <div className="flex items-center gap-3 flex-wrap">
+                {filteredLogs.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <div className="w-3 h-3 rounded-full bg-teal-500 opacity-80" />
+                    <span>Injection day</span>
+                  </div>
+                )}
                 {doseChangeLines.length > 0 && (
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     <div className="w-3 border-t border-dashed border-teal-500" />

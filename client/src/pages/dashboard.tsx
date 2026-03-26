@@ -2,14 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle, Bell } from "lucide-react";
+import { Syringe, CheckCircle2, Circle, TrendingDown, Flame, AlertCircle, ChevronRight, Activity, Target } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDate } from "@/lib/date-utils";
-import { formatWeight, convertWeight } from "@/lib/weight-utils";
-import { useState, useEffect } from "react";
+import { formatWeight, convertWeight, kgToLbs } from "@/lib/weight-utils";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
-import type { User, Task, ProtocolItem, Protocol } from "@shared/schema";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import type { User, Task, ProtocolItem, Protocol, Glp1Log } from "@shared/schema";
 import OnboardingWizard from "@/components/onboarding-wizard";
 
 interface DashboardData {
@@ -29,6 +30,155 @@ interface DashboardData {
   weeklyData: Array<{ date: string; compliance: number }>;
 }
 
+// SVG half-circle gauge component
+function InjectionGauge({ progress, isToday, shotLogged }: { progress: number; isToday: boolean; shotLogged: boolean }) {
+  const r = 70;
+  const cx = 100;
+  const cy = 95;
+  const p = Math.max(0, Math.min(1, progress));
+
+  const endAngle = Math.PI - p * Math.PI;
+  const endX = cx + r * Math.cos(endAngle);
+  const endY = cy - r * Math.sin(endAngle);
+
+  const gaugeColor = shotLogged
+    ? "#22c55e"
+    : p >= 1 ? "#ef4444"
+    : p >= 0.8 ? "#f97316"
+    : p >= 0.5 ? "#eab308"
+    : "#14B8A6";
+
+  const label = shotLogged
+    ? "Injected ✓"
+    : p >= 1 ? "Due Now!"
+    : p >= 0.8 ? "Almost due"
+    : p >= 0.5 ? "Halfway"
+    : "Recently dosed";
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 200 115" className="w-56 h-32">
+        {/* Background track */}
+        <path
+          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none" stroke="#e5e7eb" strokeWidth="14" strokeLinecap="round"
+        />
+        {/* Progress fill */}
+        {p > 0 && (
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 ${p > 0.5 ? 1 : 0} 1 ${endX} ${endY}`}
+            fill="none" stroke={gaugeColor} strokeWidth="14" strokeLinecap="round"
+          />
+        )}
+        {/* Center label */}
+        <text x={cx} y={cy - 20} textAnchor="middle" className="fill-current" style={{ fontSize: 11, fill: '#6b7280' }}>
+          {label}
+        </text>
+        {/* Needle dot at end */}
+        {p > 0 && (
+          <circle cx={endX} cy={endY} r={6} fill={gaugeColor} />
+        )}
+        {/* Left label */}
+        <text x={cx - r - 4} y={cy + 18} textAnchor="middle" style={{ fontSize: 9, fill: '#9ca3af' }}>0</text>
+        {/* Right label */}
+        <text x={cx + r + 4} y={cy + 18} textAnchor="middle" style={{ fontSize: 9, fill: '#9ca3af' }}>Due</text>
+      </svg>
+      {isToday && !shotLogged && (
+        <p className="text-xs font-bold text-red-500 -mt-1 mb-1 tracking-wide uppercase">Today is Shot Day!</p>
+      )}
+    </div>
+  );
+}
+
+// Progress ring for goal weight
+function ProgressRing({ percent, label }: { percent: number; label: string }) {
+  const r = 28;
+  const circ = 2 * Math.PI * r;
+  const fill = circ - (Math.max(0, Math.min(100, percent)) / 100) * circ;
+  return (
+    <div className="relative w-20 h-20 flex items-center justify-center">
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 72 72">
+        <circle cx="36" cy="36" r={r} fill="none" stroke="#e5e7eb" strokeWidth="7" />
+        <circle
+          cx="36" cy="36" r={r} fill="none"
+          stroke="hsl(175,60%,42%)" strokeWidth="7"
+          strokeDasharray={circ} strokeDashoffset={fill}
+          strokeLinecap="round"
+          style={{ transition: "stroke-dashoffset 0.5s ease" }}
+        />
+      </svg>
+      <span className="text-xs font-bold text-foreground leading-tight text-center">{label}</span>
+    </div>
+  );
+}
+
+// Pharmacokinetic medication levels chart
+function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null | undefined }) {
+  const chartData = useMemo(() => {
+    const halfLife = drug?.toLowerCase().includes("tirzepatide") ? 5 : 7; // days
+    const days = 60;
+    const today = new Date();
+    const data: { date: string; level: number }[] = [];
+    for (let i = days; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dayStr = d.toISOString().split("T")[0];
+      let level = 0;
+      for (const log of logs) {
+        const logDate = new Date(log.date);
+        const diff = (d.getTime() - logDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (diff >= 0) {
+          level += (log.doseAmount || 1) * Math.pow(0.5, diff / halfLife);
+        }
+      }
+      data.push({ date: dayStr.slice(5), level: Math.round(level * 100) / 100 });
+    }
+    return data;
+  }, [logs, drug]);
+
+  const hasData = logs.length > 0;
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Activity size={14} className="text-primary" />
+            <span className="text-sm font-bold text-foreground">Medication Levels</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground">Est. concentration (60 days)</span>
+        </div>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height={100}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -30, bottom: 0 }}>
+              <defs>
+                <linearGradient id="medGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(247,72%,55%)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="hsl(247,72%,55%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fontSize: 9 }} interval={14} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 11, padding: "4px 8px" }}
+                formatter={(val: number) => [`${val.toFixed(2)} mg`, "Level"]}
+              />
+              <Area
+                type="monotone" dataKey="level" stroke="hsl(247,72%,55%)"
+                fill="url(#medGrad)" strokeWidth={2} dot={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-24 flex items-center justify-center">
+            <p className="text-xs text-muted-foreground">Log your first shot to see medication levels</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -38,10 +188,8 @@ export default function Dashboard() {
   const today = formatDate(new Date());
 
   const { data: user } = useQuery<User>({ queryKey: ['/api/user'] });
-
-  const { data: dashboardData, isLoading } = useQuery<DashboardData>({
-    queryKey: ['/api/analytics/dashboard'],
-  });
+  const { data: dashboardData, isLoading } = useQuery<DashboardData>({ queryKey: ['/api/analytics/dashboard'] });
+  const { data: glp1Logs = [] } = useQuery<Glp1Log[]>({ queryKey: ['/api/glp1-logs'] });
 
   const { data: todayTasks = [] } = useQuery<Task[]>({
     queryKey: ['/api/tasks', { date: today }],
@@ -66,19 +214,26 @@ export default function Dashboard() {
     enabled: protocols.length > 0,
   });
 
+  const { data: injectionDayData } = useQuery<{ isInjectionDay: boolean }>({
+    queryKey: ["/api/push/is-injection-day"],
+  });
+
   const generateTasksMutation = useMutation({
     mutationFn: async (date: string) => {
       const response = await apiRequest("POST", "/api/tasks/generate", { date });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/tasks'] }),
   });
 
+  useEffect(() => { generateTasksMutation.mutate(today); }, []);
+
   useEffect(() => {
-    generateTasksMutation.mutate(today);
-  }, []);
+    if (!onboardingChecked && user !== undefined) {
+      setOnboardingChecked(true);
+      if (!user?.hasCompletedOnboarding) setShowOnboarding(true);
+    }
+  }, [user, onboardingChecked]);
 
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, completed }: { taskId: number; completed: boolean }) => {
@@ -89,238 +244,279 @@ export default function Dashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
       queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update task", variant: "destructive" });
-    },
+    onError: () => toast({ title: "Error", description: "Failed to update task", variant: "destructive" }),
   });
-
-  const { data: injectionDayData } = useQuery<{ isInjectionDay: boolean }>({
-    queryKey: ["/api/push/is-injection-day"],
-  });
-
-  // Show onboarding if not completed
-  useEffect(() => {
-    if (!onboardingChecked && user !== undefined) {
-      setOnboardingChecked(true);
-      if (!user?.hasCompletedOnboarding) {
-        setShowOnboarding(true);
-      }
-    }
-  }, [user, onboardingChecked]);
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
-  };
 
   const weightUnit = user?.weightUnit ?? "lbs";
   const isInjectionDay = injectionDayData?.isInjectionDay ?? false;
+  const shotLogged = dashboardData?.todayShotLogged ?? false;
+
+  // Gauge: compute days since last injection / interval
+  const gaugeProgress = useMemo(() => {
+    if (!dashboardData?.latestShot?.date) return 0;
+    const lastDate = new Date(dashboardData.latestShot.date);
+    const now = new Date();
+    const daysSince = (now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+    const freq = user?.glp1InjectionFrequency;
+    const interval = freq === "biweekly" ? 14 : freq === "daily" ? 1 : 7;
+    return daysSince / interval;
+  }, [dashboardData?.latestShot, user?.glp1InjectionFrequency]);
+
+  // BMI calculation
+  const bmi = useMemo(() => {
+    if (!user?.heightCm || !dashboardData?.latestWeight) return null;
+    const weightKg = weightUnit === "kg" ? dashboardData.latestWeight : dashboardData.latestWeight * 0.453592;
+    const heightM = user.heightCm / 100;
+    return weightKg / (heightM * heightM);
+  }, [user?.heightCm, dashboardData?.latestWeight, weightUnit]);
+
+  // Goal progress ring
+  const goalProgressPct = useMemo(() => {
+    if (!user?.goalWeight || !dashboardData?.latestWeight || !dashboardData.totalWeightLost) return null;
+    const startWeight = dashboardData.latestWeight + dashboardData.totalWeightLost;
+    const range = startWeight - user.goalWeight;
+    if (range <= 0) return 100;
+    return Math.round(((startWeight - dashboardData.latestWeight) / range) * 100);
+  }, [user?.goalWeight, dashboardData?.latestWeight, dashboardData?.totalWeightLost]);
+
+  const weightLost = dashboardData?.totalWeightLost
+    ? convertWeight(dashboardData.totalWeightLost, weightUnit)
+    : null;
+
+  const hasGlp1Setup = !!user?.glp1Drug;
+
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  };
 
   return (
     <>
-    {showOnboarding && (
-      <OnboardingWizard
-        onComplete={() => {
-          setShowOnboarding(false);
-          queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-        }}
-      />
-    )}
-    <div className="px-4 py-5 space-y-5">
-
-      {/* Injection day banner — shown when push isn't available or not subscribed */}
-      {isInjectionDay && !dashboardData?.todayShotLogged && (
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <Bell size={18} className="text-amber-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-amber-800">Shot day reminder</p>
-            <p className="text-xs text-amber-600">
-              Today is your {user?.glp1InjectionDay} injection day{user?.glp1Drug ? ` — ${user.glp1Drug}` : ""}.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            className="bg-amber-500 hover:bg-amber-600 text-white text-xs h-8 px-3 shrink-0"
-            onClick={() => setLocation("/log-shot")}
-          >
-            Log Shot
-          </Button>
-        </div>
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={() => {
+            setShowOnboarding(false);
+            queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+          }}
+        />
       )}
 
-      {/* Hero Card */}
-      <div className="gradient-primary rounded-2xl p-5 text-white shadow-lg">
-        <div className="flex items-start justify-between">
+      <div className="px-4 py-4 space-y-4">
+
+        {/* Greeting */}
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm opacity-80">{getGreeting()},</p>
-            <h2 className="text-2xl font-bold mt-0.5">{user?.name || "there"}</h2>
-            <p className="text-sm opacity-75 mt-1">Track your protocol, stay on level.</p>
+            <p className="text-xs text-muted-foreground">{getGreeting()},</p>
+            <h2 className="text-xl font-bold text-foreground leading-tight">{user?.name || "there"}</h2>
           </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold">{user?.streak || 0}</div>
-            <div className="text-xs opacity-80 flex items-center justify-end gap-1">
-              <Flame size={12} />
-              Day Streak
-            </div>
+          <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-full px-3 py-1.5">
+            <Flame size={14} className="text-amber-500" />
+            <span className="text-xs font-bold text-amber-700">{user?.streak || 0} streak</span>
           </div>
         </div>
 
-        {/* Today's shot status */}
-        <div className="mt-4 bg-white/15 rounded-xl p-3 flex items-center justify-between">
-          {dashboardData?.todayShotLogged ? (
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-green-300" />
-              <div>
-                <p className="text-sm font-semibold">Shot logged today</p>
-                <p className="text-xs opacity-80">
-                  {dashboardData.todayShot?.drugName} {dashboardData.todayShot?.doseAmount}{dashboardData.todayShot?.doseUnit}
-                  {dashboardData.todayShot?.injectionSite
-                    ? ` · ${dashboardData.todayShot.injectionSite.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`
-                    : ''}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Circle size={18} className="opacity-60" />
-              <div>
-                <p className="text-sm font-semibold">No shot logged yet</p>
-                <p className="text-xs opacity-75">
-                  {dashboardData?.latestShot
-                    ? `Last: ${dashboardData.latestShot.drugName} on ${dashboardData.latestShot.date}`
-                    : "Log your first shot to get started"}
-                </p>
-              </div>
-            </div>
-          )}
-          <Button
-            size="sm"
-            className="bg-white text-primary hover:bg-white/90 font-semibold text-xs h-8 px-3 rounded-lg shrink-0"
-            onClick={() => setLocation("/log-shot")}
-          >
-            {dashboardData?.todayShotLogged ? "Edit" : "Log Shot"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Key Stats Row — tappable to analytics */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card
-          className="cursor-pointer active:scale-95 transition-transform"
-          onClick={() => setLocation("/analytics")}
-        >
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-primary">
-              {dashboardData?.glp1Adherence ?? 0}%
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Adherence</div>
-          </CardContent>
-        </Card>
-        <Card
-          className="cursor-pointer active:scale-95 transition-transform"
-          onClick={() => setLocation("/analytics")}
-        >
-          <CardContent className="p-3 text-center">
-            <div className="text-xl font-bold text-secondary">
-              {formatWeight(dashboardData?.latestWeight ?? null, weightUnit)}
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">Current wt.</div>
-          </CardContent>
-        </Card>
-        <Card
-          className="cursor-pointer active:scale-95 transition-transform"
-          onClick={() => setLocation("/analytics")}
-        >
-          <CardContent className="p-3 text-center">
-            <div className={`text-xl font-bold ${
-              dashboardData?.totalWeightLost && dashboardData.totalWeightLost > 0
-                ? "text-green-600"
-                : "text-muted-foreground"
-            }`}>
-              {dashboardData?.totalWeightLost && dashboardData.totalWeightLost > 0
-                ? `-${convertWeight(dashboardData.totalWeightLost, weightUnit)}`
-                : "—"}
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">{weightUnit} lost</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Today's Supplement Stack */}
-      {todayTasks.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-foreground">Today's Stack</h3>
-              <Badge variant="secondary" className="text-xs">
-                {dashboardData?.completedTasks || 0}/{dashboardData?.todayTasks || 0} done
-              </Badge>
-            </div>
-            <div className="space-y-2">
-              {todayTasks.map((task) => {
-                const item = protocolItems.find(i => i.id === task.protocolItemId);
-                if (!item) return null;
-                return (
-                  <div key={task.id} className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${task.completed ? 'bg-green-50' : 'bg-muted/50'}`}>
-                    <button
-                      onClick={() => toggleTaskMutation.mutate({ taskId: task.id, completed: !task.completed })}
-                      className="flex-shrink-0 touch-target flex items-center justify-center"
-                    >
-                      {task.completed
-                        ? <CheckCircle2 size={20} className="text-success" />
-                        : <Circle size={20} className="text-muted-foreground" />
-                      }
-                    </button>
+        {/* Injection Gauge Hero */}
+        {hasGlp1Setup && (
+          <Card className="overflow-hidden">
+            <CardContent className="p-4 flex flex-col items-center">
+              <InjectionGauge
+                progress={shotLogged ? 0 : gaugeProgress}
+                isToday={isInjectionDay}
+                shotLogged={shotLogged}
+              />
+              <div className="w-full mt-1">
+                {shotLogged ? (
+                  <div className="flex items-center gap-2 bg-green-50 rounded-xl px-3 py-2">
+                    <CheckCircle2 size={16} className="text-green-500 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                        {item.name}
+                      <p className="text-sm font-semibold text-green-800">Shot logged today</p>
+                      <p className="text-xs text-green-600">
+                        {dashboardData?.todayShot?.drugName} {dashboardData?.todayShot?.doseAmount}{dashboardData?.todayShot?.doseUnit}
                       </p>
-                      {item.dosageAmount && (
-                        <p className="text-xs text-muted-foreground">{item.dosageAmount}{item.dosageUnit}</p>
-                      )}
                     </div>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="text-green-700 h-7 px-2 text-xs"
+                      onClick={() => setLocation("/log-shot")}
+                    >Edit</Button>
                   </div>
-                );
-              })}
+                ) : (
+                  <Button
+                    className="w-full gradient-primary text-white font-semibold h-10"
+                    onClick={() => setLocation("/log-shot")}
+                  >
+                    <Syringe size={15} className="mr-2" />
+                    {isInjectionDay ? "Log Today's Shot" : "Log Shot"}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Weight Hero Card */}
+        {(weightLost != null || goalProgressPct != null) && (
+          <div className="gradient-primary rounded-2xl p-4 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs opacity-70 mb-0.5">Total weight lost</p>
+                <div className="flex items-baseline gap-2">
+                  {weightLost != null && weightLost > 0 ? (
+                    <>
+                      <span className="text-4xl font-black">{weightLost.toFixed(1)}</span>
+                      <span className="text-lg font-medium opacity-80">{weightUnit}</span>
+                      <TrendingDown size={22} className="text-green-300" />
+                    </>
+                  ) : (
+                    <span className="text-2xl font-bold opacity-60">Log your weight to start</span>
+                  )}
+                </div>
+                {dashboardData?.latestWeight && (
+                  <p className="text-xs opacity-70 mt-1">
+                    Current: {formatWeight(dashboardData.latestWeight, weightUnit)}
+                    {user?.goalWeight && (
+                      <> · Goal: {formatWeight(user.goalWeight, weightUnit)}</>
+                    )}
+                  </p>
+                )}
+              </div>
+              {goalProgressPct != null && (
+                <ProgressRing
+                  percent={goalProgressPct}
+                  label={`${goalProgressPct}%\nto goal`}
+                />
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
 
-      {/* Empty state */}
-      {todayTasks.length === 0 && !isLoading && (
-        <Card>
-          <CardContent className="p-6 text-center">
-            <AlertCircle size={32} className="mx-auto mb-2 text-muted-foreground/40" />
-            <p className="font-medium text-foreground">No stack items today</p>
-            <p className="text-sm text-muted-foreground mt-1">Add supplements to your protocol to track them here</p>
-          </CardContent>
-        </Card>
-      )}
+        {/* Stats Row */}
+        <div className="grid grid-cols-4 gap-2">
+          <Card className="cursor-pointer active:scale-95 transition-transform" onClick={() => setLocation("/analytics")}>
+            <CardContent className="p-2.5 text-center">
+              <div className="text-base font-bold text-primary">
+                {dashboardData?.glp1Adherence ?? 0}%
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">Adherence</div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer active:scale-95 transition-transform" onClick={() => setLocation("/analytics")}>
+            <CardContent className="p-2.5 text-center">
+              <div className="text-base font-bold text-secondary">
+                {glp1Logs.length}
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">Shots</div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer active:scale-95 transition-transform">
+            <CardContent className="p-2.5 text-center">
+              <div className="text-base font-bold text-amber-500">
+                {bmi != null ? bmi.toFixed(1) : "—"}
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">BMI</div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer active:scale-95 transition-transform" onClick={() => setLocation("/analytics")}>
+            <CardContent className="p-2.5 text-center">
+              <div className="text-base font-bold text-foreground">
+                {dashboardData?.weekCompliance ?? 0}%
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">This wk</div>
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Button
-          variant="outline"
-          className="h-14 flex flex-col gap-1 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
-          onClick={() => setLocation("/log-shot")}
-        >
-          <Syringe size={18} />
-          <span className="text-xs font-medium">Log Shot</span>
-        </Button>
-        <Button
-          variant="outline"
-          className="h-14 flex flex-col gap-1 border-secondary/20 bg-secondary/5 text-secondary hover:bg-secondary/10"
-          onClick={() => setLocation("/progress")}
-        >
-          <TrendingDown size={18} />
-          <span className="text-xs font-medium">View Progress</span>
-        </Button>
+        {/* Fallback banner if no GLP-1 setup */}
+        {!hasGlp1Setup && !isLoading && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Target size={20} className="text-primary shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Set up your medication</p>
+                <p className="text-xs text-muted-foreground">Add your GLP-1 or peptide to get started</p>
+              </div>
+              <Button size="sm" className="gradient-primary text-white text-xs h-8"
+                onClick={() => setShowOnboarding(true)}>
+                Setup
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Injection day banner as fallback (when push reminders not enabled) */}
+        {isInjectionDay && !shotLogged && !user?.reminderEnabled && hasGlp1Setup && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <Syringe size={16} className="text-amber-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Shot day reminder</p>
+              <p className="text-xs text-amber-600">
+                Today is your {user?.glp1InjectionDay} injection day{user?.glp1Drug ? ` — ${user.glp1Drug}` : ""}.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Medication Levels Chart */}
+        {hasGlp1Setup && glp1Logs.length > 0 && (
+          <MedLevelsChart logs={glp1Logs} drug={user?.glp1Drug} />
+        )}
+
+        {/* Today's Supplement Stack */}
+        {todayTasks.length > 0 && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-foreground">Today's Stack</h3>
+                <Badge variant="secondary" className="text-xs">
+                  {dashboardData?.completedTasks || 0}/{dashboardData?.todayTasks || 0} done
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {todayTasks.map((task) => {
+                  const item = protocolItems.find(i => i.id === task.protocolItemId);
+                  if (!item) return null;
+                  return (
+                    <div key={task.id} className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${task.completed ? 'bg-green-50' : 'bg-muted/50'}`}>
+                      <button
+                        onClick={() => toggleTaskMutation.mutate({ taskId: task.id, completed: !task.completed })}
+                        className="flex-shrink-0 touch-target flex items-center justify-center"
+                      >
+                        {task.completed
+                          ? <CheckCircle2 size={20} className="text-green-500" />
+                          : <Circle size={20} className="text-muted-foreground" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                          {item.name}
+                        </p>
+                        {item.dosageAmount && (
+                          <p className="text-xs text-muted-foreground">{item.dosageAmount}{item.dosageUnit}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {todayTasks.length === 0 && !isLoading && (
+          <Card>
+            <CardContent className="p-5 text-center">
+              <AlertCircle size={28} className="mx-auto mb-2 text-muted-foreground/40" />
+              <p className="text-sm font-medium text-foreground">No stack items today</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Add supplements to your protocol to track them here</p>
+              <Button variant="outline" size="sm" className="mt-3 text-xs h-8"
+                onClick={() => setLocation("/protocols")}>
+                <ChevronRight size={12} className="mr-1" />
+                Go to Protocols
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
       </div>
-
-    </div>
     </>
   );
 }

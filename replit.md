@@ -14,6 +14,32 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### March 2026 - Dashboard Gamification, Peptide Calculator, Dark Mode, Analytics Upgrade (Tasks #7–10)
+- **Dashboard completely rebuilt** with gamified hero:
+  - SVG semicircle injection gauge (shows cycle progress: green→yellow→orange→red as due date approaches)
+  - Pharmacokinetic medication levels chart (AreaChart computing exponential decay of drug concentration)
+  - Weight hero card with total weight lost + SVG progress ring showing % toward goal weight
+  - 4-column stats row: Adherence, Total Shots, BMI (when height set), Weekly compliance
+- **Peptide Calculator page** (`/calculate`, new bottom nav tab):
+  - Multi-peptide blend builder with vial size + desired dose inputs
+  - BAC water volume + syringe type (U-100/U-40) selector
+  - Live dosage result table showing exact units to draw
+  - Save calculations to "My Calcs" tab with persistent vial tracker (log/undo/delete)
+- **Dark Mode** (Task #10):
+  - `ThemeProvider` in `client/src/lib/theme-provider.tsx` applies `.dark` class to `<html>`
+  - Three-way toggle in Settings: Light / Dark / System (follows OS preference)
+  - Persists to localStorage + saves to user.theme via PATCH /api/user/settings
+- **Analytics Upgrade** (Task #8):
+  - Dose-colored injection day dots on weight chart (teal with glow ring vs. indigo for regular days)
+  - Injection day legend entry in chart legend
+- **Settings Upgrades**:
+  - Appearance card with Sun/Moon/Monitor theme buttons
+  - Height (cm) field in Goals & Units card — used to compute BMI on dashboard
+- **Backend Additions**:
+  - `heightCm` + `theme` fields added to `updateUserSettingsSchema` (PATCH /api/user/settings)
+  - 7 new API routes for peptide calculations + vial logs (CRUD)
+  - `storage.ts` extended with peptide calculation and vial log CRUD implementations
+
 ### March 2026 - LevelTrack Rebrand & GLP-1 Foundation (Task #1)
 - **Rebranded** from "Nurtur Stack" to "LevelTrack" throughout the app
 - **New color palette**: Deep indigo primary (hsl 247, 72%, 55%) + teal secondary + amber accent — clean, modern, medical/trustworthy feel

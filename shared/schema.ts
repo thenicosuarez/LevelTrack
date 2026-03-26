@@ -24,6 +24,9 @@ export const users = pgTable("users", {
   hasCompletedOnboarding: boolean("has_completed_onboarding").default(false),
   reminderEnabled: boolean("reminder_enabled").default(false),
   reminderTime: text("reminder_time").default("09:00"), // HH:MM local time
+  // Profile
+  heightCm: integer("height_cm"), // for BMI calculation
+  theme: text("theme").default("light"), // light | dark | system
 });
 
 export const protocols = pgTable("protocols", {
@@ -183,6 +186,27 @@ export const progressPhotos = pgTable("progress_photos", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ─── Peptide Calculator Tables ─────────────────────────────────────────────
+
+export const peptideCalculations = pgTable("peptide_calculations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  name: text("name").notNull(), // e.g. "Morning Stack"
+  peptides: jsonb("peptides").notNull(), // PeptideEntry[]
+  bacWaterMl: real("bac_water_ml").notNull(),
+  syringeType: text("syringe_type").notNull().default("U-100"), // "U-100" | "U-40"
+  injectionSchedule: text("injection_schedule"), // "daily", "Mon/Wed/Fri", etc.
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const vialLogs = pgTable("vial_logs", {
+  id: serial("id").primaryKey(),
+  calculationId: integer("calculation_id").references(() => peptideCalculations.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  loggedAt: timestamp("logged_at").defaultNow(),
+});
+
 // ─── Insert Schemas ────────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -243,6 +267,16 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
   createdAt: true,
 });
 
+export const insertPeptideCalculationSchema = createInsertSchema(peptideCalculations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertVialLogSchema = createInsertSchema(vialLogs).omit({
+  id: true,
+  loggedAt: true,
+});
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -277,3 +311,16 @@ export type InsertProgressPhoto = z.infer<typeof insertProgressPhotoSchema>;
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+
+// Peptide entry within a calculation
+export interface PeptideEntry {
+  name: string;
+  amountMg: number;
+  desiredDoseMcg: number;
+}
+
+export type PeptideCalculation = typeof peptideCalculations.$inferSelect;
+export type InsertPeptideCalculation = z.infer<typeof insertPeptideCalculationSchema>;
+
+export type VialLog = typeof vialLogs.$inferSelect;
+export type InsertVialLog = z.infer<typeof insertVialLogSchema>;

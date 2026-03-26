@@ -17,8 +17,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
-import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw } from "lucide-react";
+import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw, Sun, Moon, Monitor } from "lucide-react";
 import type { User } from "@shared/schema";
+import { useTheme } from "@/lib/theme-provider";
 import { kgToLbs, convertWeight, lbsToKg } from "@/lib/weight-utils";
 import {
   isPushSupported,
@@ -48,6 +49,7 @@ const settingsSchema = z.object({
   glp1StartDate: z.string(),
   goalWeight: z.string(),
   weightUnit: z.enum(["lbs", "kg"]),
+  heightCm: z.string(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -79,6 +81,14 @@ export default function Settings() {
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [pushBusy, setPushBusy] = useState(false);
+  const { theme, setTheme } = useTheme();
+
+  const handleThemeChange = async (newTheme: "light" | "dark" | "system") => {
+    setTheme(newTheme);
+    try {
+      await apiRequest("PATCH", "/api/user/settings", { theme: newTheme });
+    } catch { /* non-critical */ }
+  };
 
   const { data: user } = useQuery<User>({
     queryKey: ["/api/user"],
@@ -119,6 +129,7 @@ export default function Settings() {
       glp1StartDate: user?.glp1StartDate ?? "",
       goalWeight: toFormStr(displayGoalWeight),
       weightUnit: storedWeightUnit,
+      heightCm: toFormStr(user?.heightCm),
     },
   });
 
@@ -152,6 +163,7 @@ export default function Settings() {
         glp1InjectionDay: fromFormSelect(data.glp1InjectionDay),
         glp1StartDate: data.glp1StartDate || null,
         goalWeight: goalWeightLbs,
+        heightCm: fromFormNum(data.heightCm),
       };
       const res = await apiRequest("PATCH", "/api/user/settings", payload);
       return res.json();
@@ -531,8 +543,31 @@ export default function Settings() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="heightCm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Height (cm) — for BMI
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        placeholder="e.g. 175"
+                        className="h-10"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <p className="text-[10px] text-muted-foreground">
-                Goal weight appears as a dashed target line on your analytics weight chart.
+                Goal weight appears as a dashed target line on your analytics weight chart. Height is used to compute BMI on your dashboard.
               </p>
             </CardContent>
           </Card>
@@ -546,6 +581,39 @@ export default function Settings() {
           </Button>
         </form>
       </Form>
+
+      {/* Appearance Card */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center">
+              <Sun size={13} className="text-primary" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Appearance</span>
+          </div>
+          <Separator />
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: "light", label: "Light", Icon: Sun },
+              { value: "dark", label: "Dark", Icon: Moon },
+              { value: "system", label: "System", Icon: Monitor },
+            ] as const).map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                onClick={() => handleThemeChange(value)}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
+                  theme === value
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                <Icon size={18} />
+                <span className="text-xs font-medium">{label}</span>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Reminders Card */}
       <Card>

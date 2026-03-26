@@ -1,11 +1,11 @@
 import { useLocation } from "wouter";
-import { Home, Syringe, BookOpen, Shield, BarChart2 } from "lucide-react";
+import { Home, Syringe, BookOpen, FlaskConical, BarChart2 } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home },
   { path: "/log-shot", label: "Log Shot", icon: Syringe },
   { path: "/journal", label: "Journal", icon: BookOpen },
-  { path: "/protocols", label: "Protocols", icon: Shield },
+  { path: "/calculate", label: "Calculate", icon: FlaskConical },
   { path: "/analytics", label: "Analytics", icon: BarChart2 },
 ];
 
