@@ -24,7 +24,7 @@ Preferred communication style: Simple, everyday language.
   - `GET /api/device-integrations` — returns connection status + lastSync for both devices
   - `GET /api/oura-daily` — returns Oura sleep + readiness data for analytics
 - **`server/device-sync.ts`** — standalone sync functions:
-  - `syncWithingsWeights(userId)` — fetches weight measurements, stores as `health_metrics` with `source="withings"`
+  - `syncWithingsWeights(userId)` — fetches weight measurements, upserts as weight-only entries in `progress_photos` with `notes="Synced from Withings"`
   - `syncOuraSleep(userId)` — fetches daily sleep + readiness scores, stores in `oura_daily_logs` table
   - Automatic token refresh on 401 responses
 - **New DB table**: `oura_daily_logs` (sleepScore, readinessScore, hrv, totalSleep, deepSleep, remSleep)
