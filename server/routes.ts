@@ -15,7 +15,12 @@ const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails("mailto:support@leveltrack.app", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  console.log("[push] VAPID keys configured — push notifications enabled");
+} else {
+  if (!VAPID_PUBLIC_KEY) console.warn("[push] VAPID_PUBLIC_KEY not set — push notifications disabled");
+  if (!VAPID_PRIVATE_KEY) console.warn("[push] VAPID_PRIVATE_KEY not set — push notifications disabled. Set this secret to enable shot reminders.");
 }
+export const pushEnabled = !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
 
 const DAY_ABBREVS: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,

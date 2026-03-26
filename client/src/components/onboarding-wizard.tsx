@@ -130,7 +130,15 @@ export default function OnboardingWizard({ onComplete }: Props) {
       if (ok) setStep(1);
     } else if (step === 1) {
       const ok = await form2.trigger();
-      if (ok) setStep(2);
+      if (ok) {
+        const freq = form2.getValues("glp1InjectionFrequency");
+        const day = form2.getValues("glp1InjectionDay");
+        if (freq !== "daily" && (!day || day === NONE)) {
+          form2.setError("glp1InjectionDay", { message: "Please select an injection day" });
+          return;
+        }
+        setStep(2);
+      }
     } else {
       const ok = await form3.trigger();
       if (ok) {
