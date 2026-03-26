@@ -521,11 +521,11 @@ function VialCard({
           </Button>
           {calc.peptides.length > 0 && (
             <Button
-              size="sm" variant="outline" className="h-9 px-3 text-xs gap-1"
+              size="sm" variant="outline" className="h-9 px-2.5 text-xs gap-1"
               onClick={() => onLearnMore(calc.peptides[0].name)}
               title="Learn more about this peptide"
             >
-              <BookOpen size={12} />
+              <BookOpen size={12} /> Learn More
             </Button>
           )}
           <Button

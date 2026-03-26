@@ -154,7 +154,7 @@ export default function PeptideReferenceLibrary() {
         </div>
         <div>
           <h2 className="text-base font-bold text-foreground leading-tight">Peptide Reference Library</h2>
-          <p className="text-xs text-muted-foreground">{peptides.length} compounds</p>
+          <p className="text-xs text-muted-foreground">{peptides.length} compounds &amp; agents</p>
         </div>
       </div>
 
