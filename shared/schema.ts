@@ -186,6 +186,21 @@ export const progressPhotos = pgTable("progress_photos", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ─── Oura Daily Logs ─────────────────────────────────────────────────────
+
+export const ouraDailyLogs = pgTable("oura_daily_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  sleepScore: integer("sleep_score"), // 0-100
+  readinessScore: integer("readiness_score"), // 0-100
+  hrv: real("hrv"), // average HRV in ms
+  totalSleep: integer("total_sleep"), // total sleep in minutes
+  deepSleep: integer("deep_sleep"), // deep sleep in minutes
+  remSleep: integer("rem_sleep"), // REM sleep in minutes
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ─── Peptide Calculator Tables ─────────────────────────────────────────────
 
 export const peptideCalculations = pgTable("peptide_calculations", {
@@ -267,6 +282,11 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
   createdAt: true,
 });
 
+export const insertOuraDailyLogSchema = createInsertSchema(ouraDailyLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertPeptideCalculationSchema = createInsertSchema(peptideCalculations).omit({
   id: true,
   createdAt: true,
@@ -324,3 +344,6 @@ export type InsertPeptideCalculation = z.infer<typeof insertPeptideCalculationSc
 
 export type VialLog = typeof vialLogs.$inferSelect;
 export type InsertVialLog = z.infer<typeof insertVialLogSchema>;
+
+export type OuraDailyLog = typeof ouraDailyLogs.$inferSelect;
+export type InsertOuraDailyLog = z.infer<typeof insertOuraDailyLogSchema>;

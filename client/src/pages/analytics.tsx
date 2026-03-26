@@ -9,10 +9,10 @@ import {
   ReferenceLine, Area, AreaChart, Legend,
 } from "recharts";
 import type { TooltipProps, DotProps } from "recharts";
-import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2 } from "lucide-react";
+import { TrendingDown, Syringe, Activity, AlertCircle, BarChart2, Moon } from "lucide-react";
 import { getDateRange } from "@/lib/date-utils";
 import { convertWeight } from "@/lib/weight-utils";
-import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto, User } from "@shared/schema";
+import type { HealthMetric, Glp1Log, SideEffectLog, ProgressPhoto, User, OuraDailyLog } from "@shared/schema";
 
 interface DashboardData {
   glp1Adherence: number;
@@ -126,6 +126,11 @@ export default function Analytics() {
     queryKey: ["/api/progress-photos"],
   });
 
+  const { data: ouraLogs = [] } = useQuery<OuraDailyLog[]>({
+    queryKey: ["/api/oura-daily", { startDate, endDate }],
+    queryFn: () => fetch(`/api/oura-daily?startDate=${startDate}&endDate=${endDate}`).then(r => r.json()),
+  });
+
   // ─── Weight data: merge health_metrics + progress_photos weights ───────────
   const weightFromMetrics = healthMetrics
     .filter((m) => m.weight != null)
@@ -191,6 +196,16 @@ export default function Analytics() {
     },
     []
   );
+
+  // ─── Oura recovery chart data ──────────────────────────────────────────────
+  const ouraChartData = ouraLogs
+    .filter(l => l.date >= startDate && l.date <= endDate)
+    .map(l => ({
+      date: formatXDate(l.date),
+      sleep: l.sleepScore,
+      readiness: l.readinessScore,
+      totalSleepHrs: l.totalSleep != null ? Math.round(l.totalSleep / 60 * 10) / 10 : null,
+    }));
 
   // ─── Stats ─────────────────────────────────────────────────────────────────
   const sortedWeights = allWeightEntries.sort((a, b) => a.date.localeCompare(b.date));
@@ -442,6 +457,80 @@ export default function Analytics() {
               <span>Nausea/Fatigue: lower is better</span>
               <span>Mood/Energy: higher is better</span>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Oura Recovery Chart */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Moon size={16} className="text-primary" />
+              <span className="text-sm font-bold text-foreground">Recovery (Oura)</span>
+            </div>
+            {ouraChartData.length > 0 && (
+              <div className="flex gap-3">
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                  <span>Sleep</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                  <span>Readiness</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {ouraChartData.length < 2 ? (
+            <div className="h-36 flex flex-col items-center justify-center text-center gap-2">
+              <AlertCircle size={24} className="text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground">
+                Connect your Oura Ring in Settings to see sleep & recovery data
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Summary stats row */}
+              {(() => {
+                const validSleep = ouraChartData.filter(d => d.sleep != null);
+                const validReady = ouraChartData.filter(d => d.readiness != null);
+                const avgSleep = validSleep.length > 0
+                  ? Math.round(validSleep.reduce((s, d) => s + (d.sleep ?? 0), 0) / validSleep.length)
+                  : null;
+                const avgReady = validReady.length > 0
+                  ? Math.round(validReady.reduce((s, d) => s + (d.readiness ?? 0), 0) / validReady.length)
+                  : null;
+                const sleepColor = avgSleep != null ? (avgSleep >= 80 ? "text-green-600" : avgSleep >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
+                const readyColor = avgReady != null ? (avgReady >= 80 ? "text-green-600" : avgReady >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
+                return (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-2.5 text-center">
+                      <p className={`text-lg font-bold ${sleepColor}`}>{avgSleep ?? "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">avg sleep score</p>
+                    </div>
+                    <div className="bg-teal-50 dark:bg-teal-950/30 rounded-xl p-2.5 text-center">
+                      <p className={`text-lg font-bold ${readyColor}`}>{avgReady ?? "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">avg readiness</p>
+                    </div>
+                  </div>
+                );
+              })()}
+              <ResponsiveContainer width="100%" height={150}>
+                <LineChart data={ouraChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 11, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                    labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  />
+                  <Line type="monotone" dataKey="sleep" name="Sleep Score" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="readiness" name="Readiness" stroke="#0d9488" strokeWidth={2} dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
           )}
         </CardContent>
       </Card>

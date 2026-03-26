@@ -802,6 +802,216 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch { res.status(500).json({ error: "Failed to undo" }); }
   });
 
+  // ─── Device Integrations (Withings + Oura) ───────────────────────────────
+
+  // Get status of device integrations
+  app.get("/api/device-integrations", async (req, res) => {
+    try {
+      const [withings, oura] = await Promise.all([
+        storage.getIntegrationByPlatform(currentUserId, "withings"),
+        storage.getIntegrationByPlatform(currentUserId, "oura"),
+      ]);
+      const withingsEnabled = !!(process.env.WITHINGS_CLIENT_ID && process.env.WITHINGS_CLIENT_SECRET);
+      const ouraEnabled = !!(process.env.OURA_CLIENT_ID && process.env.OURA_CLIENT_SECRET);
+      res.json({
+        withings: {
+          connected: !!(withings?.isActive && withings?.accessToken),
+          lastSync: withings?.lastSync ?? null,
+          configured: withingsEnabled,
+        },
+        oura: {
+          connected: !!(oura?.isActive && oura?.accessToken),
+          lastSync: oura?.lastSync ?? null,
+          configured: ouraEnabled,
+        },
+      });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch device integrations" });
+    }
+  });
+
+  // ─── Withings OAuth ───────────────────────────────────────────────────────
+  app.get("/api/integrations/withings/auth", (req, res) => {
+    const clientId = process.env.WITHINGS_CLIENT_ID;
+    if (!clientId) return res.status(503).json({ error: "Withings integration not configured. Set WITHINGS_CLIENT_ID and WITHINGS_CLIENT_SECRET." });
+
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/withings/callback`;
+    const state = Math.random().toString(36).slice(2);
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      scope: "user.metrics",
+      redirect_uri: redirectUri,
+      state,
+    });
+    res.redirect(`https://account.withings.com/oauth2_user/authorize2?${params.toString()}`);
+  });
+
+  app.get("/api/integrations/withings/callback", async (req, res) => {
+    const { code } = req.query;
+    const clientId = process.env.WITHINGS_CLIENT_ID;
+    const clientSecret = process.env.WITHINGS_CLIENT_SECRET;
+
+    if (!code || !clientId || !clientSecret) {
+      return res.redirect("/?error=withings_auth_failed");
+    }
+
+    try {
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/withings/callback`;
+      const params = new URLSearchParams({
+        action: "requesttoken",
+        grant_type: "authorization_code",
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code as string,
+        redirect_uri: redirectUri,
+      });
+
+      const tokenRes = await fetch("https://wbsapi.withings.net/v2/oauth2", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+      const tokenData = await tokenRes.json();
+
+      if (tokenData.status !== 0) {
+        return res.redirect("/?error=withings_token_failed");
+      }
+
+      await storage.upsertIntegrationByPlatform(currentUserId, "withings", {
+        accessToken: tokenData.body.access_token,
+        refreshToken: tokenData.body.refresh_token,
+        isActive: true,
+        lastSync: new Date(),
+      });
+
+      // Trigger initial sync in background
+      const { syncWithingsWeights } = await import("./device-sync");
+      syncWithingsWeights(currentUserId).catch(console.error);
+
+      res.redirect("/settings?connected=withings");
+    } catch {
+      res.redirect("/?error=withings_callback_failed");
+    }
+  });
+
+  app.delete("/api/integrations/withings", async (req, res) => {
+    try {
+      await storage.deleteIntegrationByPlatform(currentUserId, "withings");
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to disconnect Withings" });
+    }
+  });
+
+  app.post("/api/integrations/withings/sync", async (req, res) => {
+    try {
+      const { syncWithingsWeights } = await import("./device-sync");
+      const result = await syncWithingsWeights(currentUserId);
+      res.json(result);
+    } catch {
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // ─── Oura OAuth ────────────────────────────────────────────────────────────
+  app.get("/api/integrations/oura/auth", (req, res) => {
+    const clientId = process.env.OURA_CLIENT_ID;
+    if (!clientId) return res.status(503).json({ error: "Oura integration not configured. Set OURA_CLIENT_ID and OURA_CLIENT_SECRET." });
+
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/oura/callback`;
+    const state = Math.random().toString(36).slice(2);
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      scope: "daily email personal",
+      redirect_uri: redirectUri,
+      state,
+    });
+    res.redirect(`https://cloud.ouraring.com/oauth/authorize?${params.toString()}`);
+  });
+
+  app.get("/api/integrations/oura/callback", async (req, res) => {
+    const { code } = req.query;
+    const clientId = process.env.OURA_CLIENT_ID;
+    const clientSecret = process.env.OURA_CLIENT_SECRET;
+
+    if (!code || !clientId || !clientSecret) {
+      return res.redirect("/?error=oura_auth_failed");
+    }
+
+    try {
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/integrations/oura/callback`;
+      const params = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code as string,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
+
+      const tokenRes = await fetch("https://api.ouraring.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+      const tokenData = await tokenRes.json();
+
+      if (!tokenData.access_token) {
+        return res.redirect("/?error=oura_token_failed");
+      }
+
+      await storage.upsertIntegrationByPlatform(currentUserId, "oura", {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? null,
+        isActive: true,
+        lastSync: new Date(),
+      });
+
+      // Trigger initial sync in background
+      const { syncOuraSleep } = await import("./device-sync");
+      syncOuraSleep(currentUserId).catch(console.error);
+
+      res.redirect("/settings?connected=oura");
+    } catch {
+      res.redirect("/?error=oura_callback_failed");
+    }
+  });
+
+  app.delete("/api/integrations/oura", async (req, res) => {
+    try {
+      await storage.deleteIntegrationByPlatform(currentUserId, "oura");
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to disconnect Oura" });
+    }
+  });
+
+  app.post("/api/integrations/oura/sync", async (req, res) => {
+    try {
+      const { syncOuraSleep } = await import("./device-sync");
+      const result = await syncOuraSleep(currentUserId);
+      res.json(result);
+    } catch {
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // ─── Oura Daily Logs ──────────────────────────────────────────────────────
+  app.get("/api/oura-daily", async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const logs = await storage.getOuraDailyLogs(
+        currentUserId,
+        startDate as string | undefined,
+        endDate as string | undefined
+      );
+      res.json(logs);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch Oura data" });
+    }
+  });
+
   // ─── Debug endpoints ──────────────────────────────────────────────────────
   app.get("/api/debug/db-test", async (req, res) => {
     try {

@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
-import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw, Sun, Moon, Monitor } from "lucide-react";
+import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw, Sun, Moon, Monitor, Smartphone, Wifi, WifiOff, RotateCcw } from "lucide-react";
 import type { User } from "@shared/schema";
 import { useTheme } from "@/lib/theme-provider";
 import { kgToLbs, convertWeight, lbsToKg } from "@/lib/weight-utils";
@@ -97,6 +97,43 @@ export default function Settings() {
   const { data: drugs = [] } = useQuery<{ name: string; category: string }[]>({
     queryKey: ["/api/drugs"],
   });
+
+  interface DeviceStatus { connected: boolean; lastSync: string | null; configured: boolean }
+  const { data: deviceStatus, refetch: refetchDevices } = useQuery<{ withings: DeviceStatus; oura: DeviceStatus }>({
+    queryKey: ["/api/device-integrations"],
+    refetchOnMount: true,
+  });
+
+  const [syncingDevice, setSyncingDevice] = useState<"withings" | "oura" | null>(null);
+
+  const handleSyncDevice = async (device: "withings" | "oura") => {
+    setSyncingDevice(device);
+    try {
+      const res = await apiRequest("POST", `/api/integrations/${device}/sync`, {});
+      const data = await res.json();
+      if (data.synced !== undefined) {
+        toast({ title: `${device === "withings" ? "Withings" : "Oura"} synced`, description: `${data.synced} new records imported.` });
+      } else {
+        toast({ title: "Sync issue", description: data.error ?? "Unknown error", variant: "destructive" });
+      }
+      refetchDevices();
+      queryClient.invalidateQueries({ queryKey: ["/api/health-metrics/range"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    }
+    setSyncingDevice(null);
+  };
+
+  const handleDisconnectDevice = async (device: "withings" | "oura") => {
+    try {
+      await apiRequest("DELETE", `/api/integrations/${device}`, {});
+      toast({ title: `${device === "withings" ? "Withings" : "Oura"} disconnected` });
+      refetchDevices();
+    } catch {
+      toast({ title: "Failed to disconnect", variant: "destructive" });
+    }
+  };
 
   // Sync reminder state from user data
   useEffect(() => {
@@ -612,6 +649,143 @@ export default function Settings() {
               </button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Connected Devices Card */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-teal-50 rounded-lg flex items-center justify-center">
+              <Smartphone size={13} className="text-teal-500" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Connected Devices</span>
+          </div>
+          <Separator />
+
+          {/* Withings */}
+          {(() => {
+            const status = deviceStatus?.withings;
+            const isConnected = status?.connected ?? false;
+            const isConfigured = status?.configured ?? false;
+            return (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <span className="text-base font-bold text-blue-600">W</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Withings Scale</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isConnected
+                      ? `Connected${status?.lastSync ? ` · synced ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
+                      : !isConfigured ? "Setup required — add API keys" : "Not connected"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isConnected && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleSyncDevice("withings")}
+                        disabled={syncingDevice === "withings"}
+                      >
+                        <RotateCcw size={14} className={syncingDevice === "withings" ? "animate-spin" : ""} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => handleDisconnectDevice("withings")}
+                      >
+                        <WifiOff size={14} />
+                      </Button>
+                    </>
+                  )}
+                  {!isConnected && isConfigured && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => window.location.href = "/api/integrations/withings/auth"}
+                    >
+                      <Wifi size={12} className="mr-1" />
+                      Connect
+                    </Button>
+                  )}
+                  {!isConfigured && (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-lg">Not set up</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          <Separator />
+
+          {/* Oura Ring */}
+          {(() => {
+            const status = deviceStatus?.oura;
+            const isConnected = status?.connected ?? false;
+            const isConfigured = status?.configured ?? false;
+            return (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                  <span className="text-base font-bold text-amber-600">O</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Oura Ring</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isConnected
+                      ? `Connected · sleep & readiness sync${status?.lastSync ? ` · ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
+                      : !isConfigured ? "Setup required — add API keys" : "Not connected"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isConnected && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleSyncDevice("oura")}
+                        disabled={syncingDevice === "oura"}
+                      >
+                        <RotateCcw size={14} className={syncingDevice === "oura" ? "animate-spin" : ""} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => handleDisconnectDevice("oura")}
+                      >
+                        <WifiOff size={14} />
+                      </Button>
+                    </>
+                  )}
+                  {!isConnected && isConfigured && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => window.location.href = "/api/integrations/oura/auth"}
+                    >
+                      <Wifi size={12} className="mr-1" />
+                      Connect
+                    </Button>
+                  )}
+                  {!isConfigured && (
+                    <span className="text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-lg">Not set up</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          <p className="text-[10px] text-muted-foreground">
+            To enable device sync, add your Withings / Oura API credentials as environment secrets (WITHINGS_CLIENT_ID, WITHINGS_CLIENT_SECRET, OURA_CLIENT_ID, OURA_CLIENT_SECRET).
+          </p>
         </CardContent>
       </Card>
 

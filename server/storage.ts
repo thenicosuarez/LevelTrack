@@ -1,7 +1,7 @@
 import { 
   users, protocols, protocolItems, tasks, healthMetrics, integrations, voiceNotes,
   glp1Logs, sideEffectLogs, progressPhotos, pushSubscriptions,
-  peptideCalculations, vialLogs,
+  peptideCalculations, vialLogs, ouraDailyLogs,
   type User, type InsertUser, type Protocol, type InsertProtocol,
   type ProtocolItem, type InsertProtocolItem, type Task, type InsertTask,
   type HealthMetric, type InsertHealthMetric, type Integration, type InsertIntegration,
@@ -12,6 +12,7 @@ import {
   type PushSubscription, type InsertPushSubscription,
   type PeptideCalculation, type InsertPeptideCalculation,
   type VialLog,
+  type OuraDailyLog, type InsertOuraDailyLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
@@ -51,8 +52,11 @@ export interface IStorage {
 
   // Integrations
   getIntegrations(userId: number): Promise<Integration[]>;
+  getIntegrationByPlatform(userId: number, platform: string): Promise<Integration | undefined>;
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: number, integration: Partial<Integration>): Promise<Integration>;
+  upsertIntegrationByPlatform(userId: number, platform: string, data: Partial<Integration>): Promise<Integration>;
+  deleteIntegrationByPlatform(userId: number, platform: string): Promise<void>;
 
   // Voice Notes
   getVoiceNotes(userId: number): Promise<VoiceNote[]>;
@@ -99,6 +103,10 @@ export interface IStorage {
   getVialLogs(calculationId: number): Promise<VialLog[]>;
   createVialLog(calculationId: number, userId: number): Promise<VialLog>;
   deleteLastVialLog(calculationId: number): Promise<void>;
+
+  // Oura Daily Logs
+  getOuraDailyLogs(userId: number, startDate?: string, endDate?: string): Promise<OuraDailyLog[]>;
+  upsertOuraDailyLog(data: InsertOuraDailyLog): Promise<OuraDailyLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -266,6 +274,12 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(integrations).where(eq(integrations.userId, userId));
   }
 
+  async getIntegrationByPlatform(userId: number, platform: string): Promise<Integration | undefined> {
+    const [integration] = await db.select().from(integrations)
+      .where(and(eq(integrations.userId, userId), eq(integrations.platform, platform)));
+    return integration || undefined;
+  }
+
   async createIntegration(insertIntegration: InsertIntegration): Promise<Integration> {
     const [integration] = await db.insert(integrations).values(insertIntegration).returning();
     return integration;
@@ -275,6 +289,21 @@ export class DatabaseStorage implements IStorage {
     const [integration] = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
     if (!integration) throw new Error("Integration not found");
     return integration;
+  }
+
+  async upsertIntegrationByPlatform(userId: number, platform: string, data: Partial<Integration>): Promise<Integration> {
+    const existing = await this.getIntegrationByPlatform(userId, platform);
+    if (existing) {
+      const [updated] = await db.update(integrations).set(data).where(eq(integrations.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(integrations).values({ userId, platform, ...data } as InsertIntegration).returning();
+    return created;
+  }
+
+  async deleteIntegrationByPlatform(userId: number, platform: string): Promise<void> {
+    await db.delete(integrations)
+      .where(and(eq(integrations.userId, userId), eq(integrations.platform, platform)));
   }
 
   // Voice Notes
@@ -464,6 +493,29 @@ export class DatabaseStorage implements IStorage {
     if (logs.length > 0) {
       await db.delete(vialLogs).where(eq(vialLogs.id, logs[0].id));
     }
+  }
+
+  // Oura Daily Logs
+  async getOuraDailyLogs(userId: number, startDate?: string, endDate?: string): Promise<OuraDailyLog[]> {
+    if (startDate && endDate) {
+      return db.select().from(ouraDailyLogs).where(
+        and(eq(ouraDailyLogs.userId, userId), gte(ouraDailyLogs.date, startDate), lte(ouraDailyLogs.date, endDate))
+      ).orderBy(ouraDailyLogs.date);
+    }
+    return db.select().from(ouraDailyLogs)
+      .where(eq(ouraDailyLogs.userId, userId))
+      .orderBy(ouraDailyLogs.date);
+  }
+
+  async upsertOuraDailyLog(data: InsertOuraDailyLog): Promise<OuraDailyLog> {
+    const [existing] = await db.select().from(ouraDailyLogs)
+      .where(and(eq(ouraDailyLogs.userId, data.userId), eq(ouraDailyLogs.date, data.date)));
+    if (existing) {
+      const [updated] = await db.update(ouraDailyLogs).set(data).where(eq(ouraDailyLogs.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(ouraDailyLogs).values(data).returning();
+    return created;
   }
 }
 

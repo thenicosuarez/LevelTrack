@@ -14,6 +14,32 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### March 2026 - Device Integrations: Withings Scale + Oura Ring (Task #6)
+- **Full OAuth 2.0 flow** for both Withings and Oura Ring:
+  - `GET /api/integrations/withings/auth` — initiates OAuth, redirects to Withings consent
+  - `GET /api/integrations/withings/callback` — receives auth code, exchanges for tokens, triggers initial sync
+  - `POST /api/integrations/withings/sync` — pulls last 90 days of body weight from Withings Measure API
+  - `DELETE /api/integrations/withings` — disconnects / removes tokens
+  - Same pattern for Oura: `/api/integrations/oura/{auth,callback,sync}` and `DELETE /api/integrations/oura`
+  - `GET /api/device-integrations` — returns connection status + lastSync for both devices
+  - `GET /api/oura-daily` — returns Oura sleep + readiness data for analytics
+- **`server/device-sync.ts`** — standalone sync functions:
+  - `syncWithingsWeights(userId)` — fetches weight measurements, stores as `health_metrics` with `source="withings"`
+  - `syncOuraSleep(userId)` — fetches daily sleep + readiness scores, stores in `oura_daily_logs` table
+  - Automatic token refresh on 401 responses
+- **New DB table**: `oura_daily_logs` (sleepScore, readinessScore, hrv, totalSleep, deepSleep, remSleep)
+- **Storage additions**: `getIntegrationByPlatform`, `upsertIntegrationByPlatform`, `deleteIntegrationByPlatform`, `getOuraDailyLogs`, `upsertOuraDailyLog`
+- **Settings page** — new "Connected Devices" card:
+  - Withings Scale row with "Connect" → OAuth redirect; sync (rotate icon) and disconnect (WifiOff) buttons when connected
+  - Oura Ring row with same pattern
+  - Shows last-sync date when connected
+  - "Not set up" badge if API credentials not configured (env vars missing)
+  - Requires: `WITHINGS_CLIENT_ID`, `WITHINGS_CLIENT_SECRET`, `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET` env secrets
+- **Analytics page** — new "Recovery (Oura)" chart:
+  - Line chart with Sleep Score (indigo) + Readiness Score (teal) over selected period
+  - Average score pills above chart
+  - Empty state with connect prompt when no data
+
 ### March 2026 - Dashboard Gamification, Peptide Calculator, Dark Mode, Analytics Upgrade (Tasks #7–10)
 - **Dashboard completely rebuilt** with gamified hero:
   - SVG semicircle injection gauge (shows cycle progress: green→yellow→orange→red as due date approaches)
