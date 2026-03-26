@@ -126,7 +126,7 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
   const chartData = useMemo(() => {
     const halfLife = drug?.toLowerCase().includes("tirzepatide") ? 5 : 7; // days
     const today = new Date();
-    const data: { date: string; level: number }[] = [];
+    const rawData: { date: string; level: number }[] = [];
     for (let i = days; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
@@ -139,9 +139,11 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
           level += (log.doseAmount || 1) * Math.pow(0.5, diff / halfLife);
         }
       }
-      data.push({ date: dayStr.slice(5), level: Math.round(level * 100) / 100 });
+      rawData.push({ date: dayStr.slice(5), level });
     }
-    return data;
+    // Normalize to 0–100% scale
+    const maxLevel = Math.max(...rawData.map((d) => d.level), 0.001);
+    return rawData.map((d) => ({ date: d.date, level: Math.round((d.level / maxLevel) * 100) }));
   }, [logs, drug, days]);
 
   const hasData = logs.length > 0;
@@ -184,7 +186,7 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
               <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{ fontSize: 11, padding: "4px 8px" }}
-                formatter={(val: number) => [`${val.toFixed(2)} mg`, "Level"]}
+                formatter={(val: number) => [`${val}%`, "Est. Level"]}
               />
               <Area
                 type="monotone" dataKey="level" stroke="hsl(247,72%,55%)"
@@ -501,7 +503,7 @@ export default function Dashboard() {
                 <div className="text-base font-bold text-muted-foreground">—</div>
               )}
               <div className="text-[9px] text-muted-foreground leading-tight mt-0.5">
-                {weightUnit}/wk
+                Rate/{weightUnit}/wk
               </div>
             </CardContent>
           </Card>

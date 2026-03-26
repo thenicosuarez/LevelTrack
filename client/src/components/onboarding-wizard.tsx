@@ -36,7 +36,11 @@ const step3Schema = z.object({
   weight: z.string().optional(),
   weightUnit: z.enum(["lbs", "kg"]),
   goalWeight: z.string().optional(),
-  heightCm: z.string().optional(),
+  heightCm: z.string().optional().refine((v) => {
+    if (!v || v === "") return true;
+    const n = parseInt(v);
+    return !isNaN(n) && n >= 50 && n <= 272;
+  }, { message: "Height must be between 50 and 272 cm" }),
 });
 
 type Step1 = z.infer<typeof step1Schema>;
