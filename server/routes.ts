@@ -853,8 +853,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ]);
 
       res.json({
+        withingsRan: !!withingsStale,
+        ouraRan: !!ouraStale,
         withingsSynced: (withingsResult.synced ?? 0) > 0,
         ouraSynced: (ouraResult.synced ?? 0) > 0,
+        withingsCount: withingsResult.synced ?? 0,
+        ouraCount: ouraResult.synced ?? 0,
       });
     } catch {
       res.json({ withingsSynced: false, ouraSynced: false });

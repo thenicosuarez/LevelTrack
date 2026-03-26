@@ -191,12 +191,12 @@ export default function Dashboard() {
   useEffect(() => {
     apiRequest("POST", "/api/integrations/auto-sync", {})
       .then((res) => res.json())
-      .then((data: { withingsSynced?: boolean; ouraSynced?: boolean }) => {
-        if (data.withingsSynced) {
+      .then((data: { withingsRan?: boolean; ouraRan?: boolean; withingsSynced?: boolean; ouraSynced?: boolean }) => {
+        if (data.withingsRan || data.withingsSynced) {
           queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
           queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
         }
-        if (data.ouraSynced) {
+        if (data.ouraRan || data.ouraSynced) {
           queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
         }
       })
