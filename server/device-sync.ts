@@ -1,8 +1,6 @@
 import { storage } from "./storage";
 import type { Integration } from "@shared/schema";
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
-
 // ─── Shared token helpers ─────────────────────────────────────────────────────
 
 function isTokenExpired(integration: Integration): boolean {
@@ -44,7 +42,6 @@ async function refreshWithingsToken(integration: Integration): Promise<string | 
   await storage.updateIntegration(integration.id, {
     accessToken: access_token,
     refreshToken: refresh_token,
-    lastSync: new Date(),
     settings: { ...(integration.settings as object), expiresAt },
   });
   return access_token;
@@ -125,16 +122,6 @@ async function processWithingsData(
   return { synced };
 }
 
-// ─── Auto-sync Withings if stale ───────────────────────────────────────────
-export async function autoSyncWithingsIfStale(userId: number): Promise<boolean> {
-  const integration = await storage.getIntegrationByPlatform(userId, "withings");
-  if (!integration?.isActive || !integration?.accessToken) return false;
-  const lastSync = integration.lastSync ? new Date(integration.lastSync).getTime() : 0;
-  if (Date.now() - lastSync < ONE_HOUR_MS) return false;
-  syncWithingsWeights(userId).catch(console.error); // fire-and-forget
-  return true;
-}
-
 // ─── Oura ─────────────────────────────────────────────────────────────────────
 
 const OURA_TOKEN_URL = "https://api.ouraring.com/oauth/token";
@@ -166,7 +153,6 @@ async function refreshOuraToken(integration: Integration): Promise<string | null
   await storage.updateIntegration(integration.id, {
     accessToken: data.access_token,
     refreshToken: data.refresh_token || integration.refreshToken,
-    lastSync: new Date(),
     settings: { ...(integration.settings as object), expiresAt },
   });
   return data.access_token;
@@ -292,12 +278,3 @@ async function processOuraData(
   return { synced };
 }
 
-// ─── Auto-sync Oura if stale ───────────────────────────────────────────────
-export async function autoSyncOuraIfStale(userId: number): Promise<boolean> {
-  const integration = await storage.getIntegrationByPlatform(userId, "oura");
-  if (!integration?.isActive || !integration?.accessToken) return false;
-  const lastSync = integration.lastSync ? new Date(integration.lastSync).getTime() : 0;
-  if (Date.now() - lastSync < ONE_HOUR_MS) return false;
-  syncOuraSleep(userId).catch(console.error); // fire-and-forget
-  return true;
-}

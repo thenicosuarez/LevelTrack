@@ -1026,7 +1026,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token ?? null,
         isActive: true,
-        lastSync: new Date(),
         settings: { expiresAt },
       });
 
