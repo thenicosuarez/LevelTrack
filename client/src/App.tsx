@@ -24,6 +24,7 @@ function DeviceSyncTrigger() {
       .then((data: { withingsSynced?: boolean; ouraSynced?: boolean }) => {
         if (data.withingsSynced) {
           queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
         }
         if (data.ouraSynced) {
           queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });

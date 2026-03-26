@@ -117,8 +117,12 @@ export default function Settings() {
         toast({ title: "Sync issue", description: data.error ?? "Unknown error", variant: "destructive" });
       }
       refetchDevices();
-      queryClient.invalidateQueries({ queryKey: ["/api/health-metrics/range"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
+      if (device === "withings") {
+        queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
+      }
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     }

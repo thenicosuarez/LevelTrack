@@ -821,15 +821,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return entry.platform === expectedPlatform && Date.now() < entry.expiresAt;
   }
 
-  // Auto-sync endpoint — called on app load; fires background sync if connected + stale
+  // Auto-sync endpoint — awaits sync completion so client can reliably invalidate queries
   app.post("/api/integrations/auto-sync", async (req, res) => {
     try {
-      const { autoSyncWithingsIfStale, autoSyncOuraIfStale } = await import("./device-sync");
-      const [withingsSynced, ouraSynced] = await Promise.all([
-        autoSyncWithingsIfStale(currentUserId),
-        autoSyncOuraIfStale(currentUserId),
+      const { syncWithingsWeights, syncOuraSleep } = await import("./device-sync");
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+
+      const [withingsInt, ouraInt] = await Promise.all([
+        storage.getIntegrationByPlatform(currentUserId, "withings"),
+        storage.getIntegrationByPlatform(currentUserId, "oura"),
       ]);
-      res.json({ withingsSynced, ouraSynced });
+
+      const withingsStale = withingsInt?.isActive && withingsInt?.accessToken &&
+        (Date.now() - (withingsInt.lastSync ? new Date(withingsInt.lastSync).getTime() : 0)) > ONE_HOUR_MS;
+      const ouraStale = ouraInt?.isActive && ouraInt?.accessToken &&
+        (Date.now() - (ouraInt.lastSync ? new Date(ouraInt.lastSync).getTime() : 0)) > ONE_HOUR_MS;
+
+      const [withingsResult, ouraResult] = await Promise.all([
+        withingsStale ? syncWithingsWeights(currentUserId) : Promise.resolve({ synced: 0 }),
+        ouraStale ? syncOuraSleep(currentUserId) : Promise.resolve({ synced: 0 }),
+      ]);
+
+      res.json({
+        withingsSynced: (withingsResult.synced ?? 0) > 0,
+        ouraSynced: (ouraResult.synced ?? 0) > 0,
+      });
     } catch {
       res.json({ withingsSynced: false, ouraSynced: false });
     }
@@ -920,7 +936,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accessToken: tokenData.body.access_token,
         refreshToken: tokenData.body.refresh_token,
         isActive: true,
-        lastSync: new Date(),
         settings: { expiresAt },
       });
 

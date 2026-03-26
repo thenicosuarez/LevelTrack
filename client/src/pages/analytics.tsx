@@ -520,9 +520,8 @@ export default function Analytics() {
                   : null;
                 const sleepColor = avgSleep != null ? (avgSleep >= 80 ? "text-green-600" : avgSleep >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
                 const readyColor = avgReady != null ? (avgReady >= 80 ? "text-green-600" : avgReady >= 60 ? "text-yellow-600" : "text-red-500") : "text-muted-foreground";
-                const cols = avgHrv != null ? 3 : 2;
                 return (
-                  <div className={`grid grid-cols-${cols} gap-2`}>
+                  <div className={avgHrv != null ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-2"}>
                     <div className="bg-indigo-50 dark:bg-indigo-950/30 rounded-xl p-2.5 text-center">
                       <p className={`text-lg font-bold ${sleepColor}`}>{avgSleep ?? "—"}</p>
                       <p className="text-[10px] text-muted-foreground">avg sleep</p>
