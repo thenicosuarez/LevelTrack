@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar,
-  ReferenceLine, Area, AreaChart, Legend,
+  ReferenceLine, ReferenceArea, Area, AreaChart, Legend,
   PieChart, Pie, Cell, ComposedChart,
 } from "recharts";
 import type { TooltipProps, DotProps } from "recharts";
@@ -310,7 +310,7 @@ export default function Analytics() {
   const siteData = Object.entries(siteCounts).map(([name, value]) => ({ name, value }));
   const SITE_COLORS = ["#6366f1", "#0d9488", "#f59e0b", "#ef4444", "#8b5cf6", "#22d3ee"];
 
-  // ─── Side effect frequency (avg per symptom) ──────────────────────────────
+  // ─── Side effect frequency (count of entries where symptom was logged) ───────
   const filteredSide = sideEffectLogs.filter((l) => l.date >= startDate && l.date <= endDate);
   const sideData = filteredSide.map((l) => ({
     date: formatXDate(l.date), nausea: l.nausea, fatigue: l.fatigue, mood: l.mood, energy: l.energy,
@@ -318,11 +318,15 @@ export default function Analytics() {
 
   const sideFreqData = (() => {
     if (filteredSide.length === 0) return [];
-    const keys: (keyof typeof filteredSide[0])[] = ["nausea", "fatigue", "mood", "energy"];
+    const total = filteredSide.length;
+    const keys: (keyof SideEffectLog)[] = ["nausea", "fatigue", "mood", "energy"];
     return keys.map((k) => {
-      const vals = filteredSide.map((l) => l[k] as number | null).filter((v): v is number => v != null);
-      const avg = vals.length > 0 ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10 : 0;
-      return { name: k.charAt(0).toUpperCase() + k.slice(1), avg };
+      const logged = filteredSide.filter((l) => l[k] != null && (l[k] as number) > 0).length;
+      return {
+        name: k.charAt(0).toUpperCase() + k.slice(1),
+        count: logged,
+        pct: Math.round((logged / total) * 100),
+      };
     });
   })();
 
@@ -418,7 +422,15 @@ export default function Analytics() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Total Change"
-            value={totalChange != null ? `${totalChange > 0 ? "+" : ""}${-totalChange} ${weightUnit}` : "—"}
+            value={totalChange != null
+              ? totalChange > 0
+                ? `-${totalChange} ${weightUnit}`
+                : totalChange < 0
+                  ? `+${Math.abs(totalChange)} ${weightUnit}`
+                  : `0 ${weightUnit}`
+              : "—"
+            }
+            sub={totalChange != null ? (totalChange > 0 ? "lost" : totalChange < 0 ? "gained" : "no change") : undefined}
             icon={<TrendingDown size={14} />}
             color="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
           />
@@ -462,9 +474,9 @@ export default function Analytics() {
                   </div>
                   <div className="bg-muted/60 rounded-xl p-2.5 text-center">
                     <div className={`text-lg font-bold ${totalChange && totalChange > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                      {totalChange != null && totalChange > 0 ? `-${totalChange}` : "—"}
+                      {totalChange != null && totalChange > 0 ? `-${totalChange}` : totalChange != null && totalChange < 0 ? `+${Math.abs(totalChange)}` : "—"}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">{weightUnit} lost</div>
+                    <div className="text-[10px] text-muted-foreground">{weightUnit} {totalChange != null && totalChange < 0 ? "gained" : "lost"}</div>
                   </div>
                 </div>
               </div>
@@ -565,6 +577,18 @@ export default function Analytics() {
                       label={{ value: `${dc.dose}mg`, fontSize: 9, fill: "#0d9488", position: "insideTopLeft" }}
                     />
                   ))}
+                  {goalWeightConverted != null && lastWeightLbs != null && (() => {
+                    const currentW = convertWeight(lastWeightLbs, weightUnit);
+                    const lo = Math.min(currentW, goalWeightConverted);
+                    const hi = Math.max(currentW, goalWeightConverted);
+                    return (
+                      <ReferenceArea
+                        yAxisId="w" y1={lo} y2={hi}
+                        fill="#f59e0b" fillOpacity={0.08}
+                        stroke="none"
+                      />
+                    );
+                  })()}
                   {goalWeightConverted != null && (
                     <ReferenceLine
                       y={goalWeightConverted} yAxisId="w"
@@ -599,6 +623,11 @@ export default function Analytics() {
             )}
           </CardContent>
         </Card>
+
+        {/* LevelTrack branding — included in share capture */}
+        <div className="text-center text-[10px] text-muted-foreground py-1">
+          Tracked with <span className="font-bold text-primary">LevelTrack</span>
+        </div>
 
       </div>{/* end shareRef */}
 
@@ -698,7 +727,7 @@ export default function Analytics() {
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center gap-1.5">
               <Activity size={13} className="text-primary" />
-              <span className="text-xs font-bold text-foreground">Symptom Avg</span>
+              <span className="text-xs font-bold text-foreground">Symptom Frequency</span>
             </div>
             {sideFreqData.length === 0 ? (
               <div className="h-28 flex flex-col items-center justify-center text-center gap-1">
@@ -710,16 +739,16 @@ export default function Analytics() {
                 <BarChart
                   data={sideFreqData}
                   layout="vertical"
-                  margin={{ top: 2, right: 20, left: 0, bottom: 2 }}
+                  margin={{ top: 2, right: 24, left: 0, bottom: 2 }}
                 >
-                  <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} width={48} />
                   <Tooltip
                     contentStyle={{ fontSize: 11, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                    formatter={(val) => [`${val}/5`, "Avg"]}
+                    formatter={(val, _name, props) => [`${props.payload?.count} logs (${val}%)`, "Frequency"]}
                   />
-                  <Bar dataKey="avg" radius={[0, 4, 4, 0]} maxBarSize={14}>
-                    {sideFreqData.map((entry, i) => {
+                  <Bar dataKey="pct" radius={[0, 4, 4, 0]} maxBarSize={14}>
+                    {sideFreqData.map((_entry, i) => {
                       const colors = ["#ef4444", "#f97316", "#22c55e", "#3D27CC"];
                       return <Cell key={`freq-${i}`} fill={colors[i % colors.length]} />;
                     })}
@@ -903,10 +932,6 @@ export default function Analytics() {
         </Card>
       )}
 
-      {/* LevelTrack branding footer for share */}
-      <div className="text-center text-[10px] text-muted-foreground py-1">
-        Tracked with <span className="font-bold text-primary">LevelTrack</span>
-      </div>
     </div>
   );
 }
