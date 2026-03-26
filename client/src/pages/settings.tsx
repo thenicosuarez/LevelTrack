@@ -683,7 +683,7 @@ export default function Settings() {
                   <p className="text-sm font-semibold text-foreground">Withings Scale</p>
                   <p className="text-xs text-muted-foreground">
                     {isConnected
-                      ? `Connected${status?.lastSync ? ` · synced ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
+                      ? `Connected${status?.lastSync ? ` · synced ${new Date(status.lastSync).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}`
                       : !isConfigured ? "Setup required — add API keys" : "Sync weight from your smart scale"}
                   </p>
                 </div>
@@ -744,7 +744,7 @@ export default function Settings() {
                   <p className="text-sm font-semibold text-foreground">Oura Ring</p>
                   <p className="text-xs text-muted-foreground">
                     {isConnected
-                      ? `Connected · sleep & readiness sync${status?.lastSync ? ` · ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
+                      ? `Connected · sleep & readiness sync${status?.lastSync ? ` · ${new Date(status.lastSync).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}`
                       : !isConfigured ? "Setup required — add API keys" : "Sync sleep, readiness & HRV data"}
                   </p>
                 </div>
