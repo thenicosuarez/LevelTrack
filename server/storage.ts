@@ -85,6 +85,7 @@ export interface IStorage {
   getProgressPhoto(id: number): Promise<ProgressPhoto | undefined>;
   createProgressPhoto(photo: InsertProgressPhoto): Promise<ProgressPhoto>;
   deleteProgressPhoto(id: number): Promise<void>;
+  upsertWithingsWeightEntry(userId: number, date: string, weightLbs: number): Promise<void>;
 
   // Push Subscriptions
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
@@ -416,6 +417,19 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProgressPhoto(id: number): Promise<void> {
     await db.delete(progressPhotos).where(eq(progressPhotos.id, id));
+  }
+
+  async upsertWithingsWeightEntry(userId: number, date: string, weightLbs: number): Promise<void> {
+    const [existing] = await db.select().from(progressPhotos).where(
+      and(eq(progressPhotos.userId, userId), eq(progressPhotos.date, date), eq(progressPhotos.notes, "Synced from Withings"))
+    ).limit(1);
+    if (existing) {
+      await db.update(progressPhotos)
+        .set({ weight: weightLbs })
+        .where(eq(progressPhotos.id, existing.id));
+    } else {
+      await db.insert(progressPhotos).values({ userId, date, weight: weightLbs, photoUrl: null, notes: "Synced from Withings" });
+    }
   }
 
   // Push Subscriptions

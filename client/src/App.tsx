@@ -19,7 +19,17 @@ import BottomNav from "@/components/bottom-nav";
 
 function DeviceSyncTrigger() {
   useEffect(() => {
-    apiRequest("POST", "/api/integrations/auto-sync", {}).catch(() => {});
+    apiRequest("POST", "/api/integrations/auto-sync", {})
+      .then((res) => res.json())
+      .then((data: { withingsSynced?: boolean; ouraSynced?: boolean }) => {
+        if (data.withingsSynced) {
+          queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
+        }
+        if (data.ouraSynced) {
+          queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
+        }
+      })
+      .catch(() => {});
   }, []);
   return null;
 }

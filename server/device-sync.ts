@@ -64,8 +64,10 @@ export async function syncWithingsWeights(userId: number): Promise<{ synced: num
   let token = await getWithingsToken(integration);
   if (!token) return { synced: 0, error: "Token refresh failed" };
 
-  // Fetch last 90 days of weight measurements
-  const lastupdate = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
+  // Incremental sync: use lastSync timestamp, fall back to 90 days on first sync
+  const lastSyncMs = integration.lastSync ? new Date(integration.lastSync).getTime() : 0;
+  const fallbackMs = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const lastupdate = Math.floor(Math.max(lastSyncMs, fallbackMs) / 1000);
   const params = new URLSearchParams({
     action: "getmeas",
     meastype: "1", // body weight
@@ -109,19 +111,9 @@ async function processWithingsData(
     const weightLbs = weightKg * 2.20462;
     const date = new Date(grp.date * 1000).toISOString().split("T")[0];
 
-    // Store as weight-only progress photo entry (no photo URL)
-    const existing = await storage.getProgressPhotos(userId);
-    const alreadyExists = existing.some(p => p.date === date && p.weight != null && p.notes?.includes("Withings"));
-    if (!alreadyExists) {
-      await storage.createProgressPhoto({
-        userId,
-        date,
-        weight: weightLbs,
-        photoUrl: null,
-        notes: "Synced from Withings",
-      });
-      synced++;
-    }
+    // Deterministic upsert by (userId, date, notes="Synced from Withings")
+    await storage.upsertWithingsWeightEntry(userId, date, weightLbs);
+    synced++;
   }
 
   // Update lastSync
