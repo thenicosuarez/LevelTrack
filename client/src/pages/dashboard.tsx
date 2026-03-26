@@ -187,6 +187,22 @@ export default function Dashboard() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const today = formatDate(new Date());
 
+  // Trigger device sync on dashboard load so weight/recovery data is fresh
+  useEffect(() => {
+    apiRequest("POST", "/api/integrations/auto-sync", {})
+      .then((res) => res.json())
+      .then((data: { withingsSynced?: boolean; ouraSynced?: boolean }) => {
+        if (data.withingsSynced) {
+          queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+        }
+        if (data.ouraSynced) {
+          queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: user } = useQuery<User>({ queryKey: ['/api/user'] });
   const { data: dashboardData, isLoading } = useQuery<DashboardData>({ queryKey: ['/api/analytics/dashboard'] });
   const { data: glp1Logs = [] } = useQuery<Glp1Log[]>({ queryKey: ['/api/glp1-logs'] });

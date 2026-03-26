@@ -684,7 +684,7 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">
                     {isConnected
                       ? `Connected${status?.lastSync ? ` · synced ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
-                      : !isConfigured ? "Setup required — add API keys" : "Not connected"}
+                      : !isConfigured ? "Setup required — add API keys" : "Sync weight from your smart scale"}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -745,7 +745,7 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">
                     {isConnected
                       ? `Connected · sleep & readiness sync${status?.lastSync ? ` · ${new Date(status.lastSync).toLocaleDateString()}` : ""}`
-                      : !isConfigured ? "Setup required — add API keys" : "Not connected"}
+                      : !isConfigured ? "Setup required — add API keys" : "Sync sleep, readiness & HRV data"}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">

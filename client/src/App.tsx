@@ -1,11 +1,8 @@
 import { Switch, Route, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
-import { useEffect } from "react";
-import { apiRequest } from "@/lib/queryClient";
 import Dashboard from "@/pages/dashboard";
 import LogShot from "@/pages/log-shot";
 import Journal from "@/pages/journal";
@@ -16,24 +13,6 @@ import Protocols from "@/pages/protocols";
 import PeptideCalculator from "@/pages/peptide-calculator";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
-
-function DeviceSyncTrigger() {
-  useEffect(() => {
-    apiRequest("POST", "/api/integrations/auto-sync", {})
-      .then((res) => res.json())
-      .then((data: { withingsSynced?: boolean; ouraSynced?: boolean }) => {
-        if (data.withingsSynced) {
-          queryClient.invalidateQueries({ queryKey: ["/api/progress-photos"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-        }
-        if (data.ouraSynced) {
-          queryClient.invalidateQueries({ queryKey: ["/api/oura-daily"] });
-        }
-      })
-      .catch(() => {});
-  }, []);
-  return null;
-}
 
 function Router() {
   return (
@@ -70,7 +49,6 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <DeviceSyncTrigger />
           <Router />
         </TooltipProvider>
       </ThemeProvider>
