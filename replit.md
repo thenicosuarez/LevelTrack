@@ -40,7 +40,7 @@ Preferred communication style: Simple, everyday language.
   - Average score pills above chart
   - Empty state with connect prompt when no data
 
-### March 2026 - Dashboard Gamification, Peptide Calculator, Dark Mode, Analytics Upgrade (Tasks #7–10)
+### March 2026 - Dashboard Gamification, Peptide Calculator, Dark Mode, Analytics Upgrade, Reference Library (Tasks #7–10)
 - **Dashboard completely rebuilt** with gamified hero:
   - SVG semicircle injection gauge (shows cycle progress: green→yellow→orange→red as due date approaches)
   - Pharmacokinetic medication levels chart (AreaChart computing exponential decay of drug concentration, with 7d/30d/90d time tabs)
@@ -53,6 +53,13 @@ Preferred communication style: Simple, everyday language.
   - BAC water volume + syringe type (U-100/U-40) selector
   - Live dosage result table showing exact units to draw
   - Save calculations to "My Calcs" tab with persistent vial tracker (log/undo/delete)
+  - "Learn More" (book icon) button on each VialCard opens the Reference Library detail sheet for the first peptide in the blend
+- **Peptide Reference Library** (Task #10):
+  - `client/src/data/peptides.json` — 40 entries covering GLP-1, Regenerative, Cognitive, Metabolic, Growth, and Other categories
+  - Each entry: name, slug, category, tagline, description, mechanism, usage, halfLifeHours, typicalDoseRange, frequency
+  - `client/src/pages/peptide-reference.tsx` — searchable list + category filter chips + bottom-sheet detail view
+  - Accessible via "Reference Library" tab in the Protocols page (My Protocols / Reference Library tab strip)
+  - `usePeptideRef()` hook exported for other pages to open the detail sheet by peptide name
 - **Dark Mode** (Task #10):
   - `ThemeProvider` in `client/src/lib/theme-provider.tsx` applies `.dark` class to `<html>`
   - Three-way toggle in Settings: Light / Dark / System (follows OS preference)

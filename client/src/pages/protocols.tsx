@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Filter, Shield, Clock, Dumbbell, Utensils, Camera, Mic } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Search, Filter, Shield, Clock, Dumbbell, Utensils, Camera, Mic, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -11,6 +12,7 @@ import ProtocolBuilder from "@/components/protocol-builder";
 import ProtocolCard from "@/components/protocol-card";
 import LabelScanner from "@/components/label-scanner";
 import VoiceNoteProcessor from "@/components/voice-note-processor";
+import PeptideReferenceLibrary from "@/pages/peptide-reference";
 import type { Protocol, ProtocolItem } from "@shared/schema";
 
 const categoryIcons = {
@@ -192,12 +194,27 @@ export default function Protocols() {
     <div className="px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-800">Protocol Planning</h1>
+        <h1 className="text-xl font-semibold text-slate-800 dark:text-foreground">Protocol Planning</h1>
         <Button onClick={() => setShowProtocolBuilder(true)}>
           <Plus size={16} className="mr-1" />
           New Protocol
         </Button>
       </div>
+
+      {/* Top-level tabs: Protocols vs Reference Library */}
+      <Tabs defaultValue="protocols" className="w-full">
+        <TabsList className="w-full grid grid-cols-2 mb-2">
+          <TabsTrigger value="protocols" className="text-xs">My Protocols</TabsTrigger>
+          <TabsTrigger value="library" className="text-xs gap-1">
+            <BookOpen size={12} /> Reference Library
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="library" className="mt-0">
+          <PeptideReferenceLibrary />
+        </TabsContent>
+
+        <TabsContent value="protocols" className="mt-0 space-y-6">
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
@@ -523,6 +540,9 @@ export default function Protocols() {
           }}
         />
       )}
+
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

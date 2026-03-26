@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { usePeptideRef } from "@/pages/peptide-reference";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -363,6 +364,7 @@ function VialCard({
   onLogDose,
   onUndo,
   onDelete,
+  onLearnMore,
   isLogging,
   isUndoing,
 }: {
@@ -370,6 +372,7 @@ function VialCard({
   onLogDose: (id: number) => void;
   onUndo: (id: number) => void;
   onDelete: (id: number) => void;
+  onLearnMore: (name: string) => void;
   isLogging: boolean;
   isUndoing: boolean;
 }) {
@@ -516,6 +519,15 @@ function VialCard({
             <Syringe size={12} className="mr-1" />
             {isLogging ? "Logging…" : "Log Dose"}
           </Button>
+          {calc.peptides.length > 0 && (
+            <Button
+              size="sm" variant="outline" className="h-9 px-3 text-xs gap-1"
+              onClick={() => onLearnMore(calc.peptides[0].name)}
+              title="Learn more about this peptide"
+            >
+              <BookOpen size={12} />
+            </Button>
+          )}
           <Button
             size="sm" variant="outline" className="h-9 px-3"
             onClick={() => onUndo(calc.id)}
@@ -542,6 +554,7 @@ function VialCard({
 export default function PeptideCalculator() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { openByName: openPeptideRef, sheet: peptideRefSheet } = usePeptideRef();
 
   const [peptides, setPeptides] = useState<PeptideEntry[]>([
     { name: "", amountMg: 5, desiredDose: 250, doseUnit: "mcg" },
@@ -889,12 +902,15 @@ export default function PeptideCalculator() {
               onLogDose={id => logDoseMutation.mutate(id)}
               onUndo={id => undoMutation.mutate(id)}
               onDelete={id => deleteMutation.mutate(id)}
+              onLearnMore={openPeptideRef}
               isLogging={loggingId === calc.id && logDoseMutation.isPending}
               isUndoing={undoingId === calc.id && undoMutation.isPending}
             />
           ))}
         </TabsContent>
       </Tabs>
+
+      {peptideRefSheet}
     </div>
   );
 }
