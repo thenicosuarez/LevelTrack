@@ -14,6 +14,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### October 2026 - Sign in with Apple, Home-Screen Icons
+- **Sign in with Apple** on the web (`GET /api/auth/apple` → Apple → `POST /api/auth/apple/callback`) and for a native iOS app (`POST /api/auth/apple/native` with the identity token and raw nonce from `expo-apple-authentication`). Apple's token signature is verified against Apple's published keys (`server/apple-token.ts`). Apple's button is shown first on the sign-in screen, as Apple's guidelines require when other social sign-ins are offered.
+- Signing in with Apple using the same verified email as an existing Google account links to that account (and vice versa).
+- **PNG app icons** (`apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`): iOS ignores SVG home-screen icons, and push notifications referenced a missing `icon-192.png`.
+
 ### October 2026 - Time Zones, Real Label Scanning, Upload Fix
 - **Time zones**: "today" now follows the user's own calendar. The browser sends its IANA zone in an `X-Timezone` header and saves it to `users.timezone`; the server computes dates with `server/dates.ts`. Before, a US evening shot was logged under tomorrow's date.
 - **Shot reminders** fire at the user's local reminder time on their injection day (they previously fired on the server's UTC clock, e.g. 2 am in California).
@@ -189,6 +194,8 @@ Preferred communication style: Simple, everyday language.
   - `DATABASE_URL` — database connection
   - `SESSION_SECRET` — **required in production**; any long random string, used to sign login cookies
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google sign-in (Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type "Web application"). Authorized redirect URI: `<APP_BASE_URL>/api/auth/google/callback`
+  - `APPLE_SERVICES_ID` — Sign in with Apple on the web (an Apple "Services ID", e.g. `com.leveltrack.web`). In the Apple Developer portal, enable Sign in with Apple on it, add your domain and the return URL `<APP_BASE_URL>/api/auth/apple/callback` (must be https)
+  - `APPLE_BUNDLE_ID` — Sign in with Apple from the native iOS app (its bundle id, e.g. `com.leveltrack.app`)
   - `APP_BASE_URL` — public URL of the app (e.g. `https://leveltrack.example.com`), used for OAuth redirect URIs
   - `LEGACY_USER_EMAIL` — optional; the first Google sign-in with this email takes over the data that existed before sign-in was added (user #1)
   - `DEMO_MODE` — optional; `true`/`false` to force the demo button on/off
@@ -215,4 +222,4 @@ Preferred communication style: Simple, everyday language.
 - AI coach layer for pattern detection
 - Push notification reminders
 - Clinician/coach shared dashboards
-- Email/password or Apple sign-in alongside Google
+- Email/password sign-in alongside Google and Apple

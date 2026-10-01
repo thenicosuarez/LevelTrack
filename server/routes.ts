@@ -1240,7 +1240,7 @@ export function startReminderScheduler(): void {
         const payload = JSON.stringify({
           title: "LevelTrack — Shot Day!",
           body: `Time for your ${drugName} injection 💉 Tap to log it.`,
-          icon: "/icon.svg",
+          icon: "/icon-192.png",
           url: "/log-shot",
         });
 

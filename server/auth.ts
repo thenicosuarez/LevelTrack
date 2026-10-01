@@ -5,7 +5,8 @@ import { randomBytes } from "crypto";
 import { pool } from "./db";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
-import { parseGoogleIdToken, type GoogleProfile } from "./google-token";
+import { parseGoogleIdToken } from "./google-token";
+import { verifyAppleIdToken, sha256Hex } from "./apple-token";
 
 declare module "express-session" {
   interface SessionData {
@@ -26,6 +27,13 @@ declare global {
 const isProduction = process.env.NODE_ENV === "production";
 
 export const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+// Sign in with Apple. Web uses a Services ID (e.g. com.leveltrack.web); the
+// native iOS app's tokens are issued for its bundle id (com.leveltrack.app).
+const appleServicesId = process.env.APPLE_SERVICES_ID;
+const appleBundleId = process.env.APPLE_BUNDLE_ID;
+export const appleWebConfigured = !!appleServicesId;
+const APPLE_COOKIE = "lt.apple";
 
 // Demo sign-in logs straight into a shared demo account. On by
 // default in development so the app works without Google credentials; off in
@@ -56,17 +64,28 @@ function signIn(req: Request, userId: number): Promise<void> {
   });
 }
 
-async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<User> {
-  const existing = await storage.getUserByGoogleId(profile.sub);
+interface SignInProfile {
+  provider: "google" | "apple";
+  sub: string;      // the provider's stable user id
+  email: string;    // verified by the provider
+  name?: string;
+  picture?: string;
+}
+
+async function findOrCreateUser(profile: SignInProfile): Promise<User> {
+  const idField = profile.provider === "google" ? "googleId" : "appleId";
+  const existing = profile.provider === "google"
+    ? await storage.getUserByGoogleId(profile.sub)
+    : await storage.getUserByAppleId(profile.sub);
   if (existing) return existing;
 
   // One-time hand-over of the pre-auth single-user data (user #1) to its owner.
   const legacyEmail = process.env.LEGACY_USER_EMAIL?.toLowerCase();
   if (legacyEmail && legacyEmail === profile.email) {
     const legacy = await storage.getUser(1);
-    if (legacy && !legacy.googleId) {
+    if (legacy && !legacy.googleId && !legacy.appleId) {
       return storage.updateUser(1, {
-        googleId: profile.sub,
+        [idField]: profile.sub,
         email: profile.email,
         name: profile.name ?? legacy.name,
         avatar: profile.picture ?? legacy.avatar,
@@ -74,10 +93,11 @@ async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<User> {
     }
   }
 
-  // Google has verified this address, so link it to an existing account with the same email.
+  // The provider has verified this address, so link it to an existing account
+  // with the same email (e.g. someone who first signed in with the other provider).
   const byEmail = await storage.getUserByEmail(profile.email);
-  if (byEmail && !byEmail.googleId) {
-    return storage.updateUser(byEmail.id, { googleId: profile.sub });
+  if (byEmail && !byEmail[idField]) {
+    return storage.updateUser(byEmail.id, { [idField]: profile.sub });
   }
 
   const base = profile.email.split("@")[0].replace(/[^a-z0-9._-]/gi, "").slice(0, 24) || "user";
@@ -86,10 +106,30 @@ async function findOrCreateGoogleUser(profile: GoogleProfile): Promise<User> {
     email: profile.email,
     name: profile.name ?? base,
     avatar: profile.picture ?? null,
-    googleId: profile.sub,
+    [idField]: profile.sub,
     streak: 0,
     totalCompliance: 0,
   });
+}
+
+function readCookie(req: Request, name: string): string | undefined {
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(rest.join("="));
+  }
+  return undefined;
+}
+
+// Apple sends the user's name only on their first sign-in, as a JSON string.
+function appleDisplayName(userJson: unknown): string | undefined {
+  if (typeof userJson !== "string") return undefined;
+  try {
+    const { name } = JSON.parse(userJson);
+    const full = [name?.firstName, name?.lastName].filter(n => typeof n === "string" && n).join(" ");
+    return full || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -132,9 +172,12 @@ export function setupAuth(app: Express): void {
   if (!googleConfigured) {
     console.warn("[auth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google sign-in disabled");
   }
+  if (!appleServicesId && !appleBundleId) {
+    console.warn("[auth] APPLE_SERVICES_ID / APPLE_BUNDLE_ID not set — Sign in with Apple disabled");
+  }
 
   app.get("/api/auth/config", (_req, res) => {
-    res.json({ google: googleConfigured, demo: demoEnabled });
+    res.json({ google: googleConfigured, apple: appleWebConfigured, demo: demoEnabled });
   });
 
   app.get("/api/auth/google", (req, res) => {
@@ -184,12 +227,88 @@ export function setupAuth(app: Express): void {
         : null;
       if (!profile) return res.redirect("/?auth_error=google_failed");
 
-      const user = await findOrCreateGoogleUser(profile);
+      const user = await findOrCreateUser({ provider: "google", ...profile });
       await signIn(req, user.id);
       res.redirect("/");
     } catch (err) {
       console.error("[auth] Google callback failed:", err);
       res.redirect("/?auth_error=google_failed");
+    }
+  });
+
+  // ─── Sign in with Apple (web) ─────────────────────────────────────────────
+  // Apple POSTs the result back cross-site (response_mode=form_post), so our
+  // SameSite=Lax session cookie isn't sent with it. The state and nonce ride in
+  // their own short-lived SameSite=None cookie instead.
+  app.get("/api/auth/apple", (req, res) => {
+    if (!appleWebConfigured) return res.redirect("/?auth_error=apple_not_configured");
+    const state = randomBytes(24).toString("hex");
+    const nonce = randomBytes(24).toString("hex");
+    res.cookie(APPLE_COOKIE, `${state}.${nonce}`, {
+      httpOnly: true, secure: true, sameSite: "none", path: "/api/auth/apple", maxAge: 10 * 60 * 1000,
+    });
+    const params = new URLSearchParams({
+      client_id: appleServicesId!,
+      redirect_uri: `${getAppBaseUrl(req)}/api/auth/apple/callback`,
+      response_type: "code id_token",
+      response_mode: "form_post",
+      scope: "name email",
+      state,
+      nonce,
+    });
+    res.redirect(`https://appleid.apple.com/auth/authorize?${params.toString()}`);
+  });
+
+  app.post("/api/auth/apple/callback", async (req, res) => {
+    const fail = (code: string) => res.redirect(303, `/?auth_error=${code}`);
+    const [expectedState, expectedNonce] = (readCookie(req, APPLE_COOKIE) ?? "").split(".");
+    res.clearCookie(APPLE_COOKIE, { path: "/api/auth/apple", secure: true, sameSite: "none" });
+
+    const { state, id_token: idToken, error, user: userJson } = req.body ?? {};
+    if (error) return fail(error === "user_cancelled_authorize" ? "apple_denied" : "apple_failed");
+    if (!appleWebConfigured || typeof idToken !== "string") return fail("apple_failed");
+    if (typeof state !== "string" || !expectedState || state !== expectedState) return fail("apple_state_invalid");
+
+    try {
+      const profile = await verifyAppleIdToken(idToken, { audiences: [appleServicesId!], expectedNonce });
+      if (!profile) return fail("apple_failed");
+      if (!profile.email || !profile.emailVerified) return fail("apple_no_email");
+      const user = await findOrCreateUser({
+        provider: "apple",
+        sub: profile.sub,
+        email: profile.email,
+        name: appleDisplayName(userJson),
+      });
+      await signIn(req, user.id);
+      res.redirect(303, "/");
+    } catch (err) {
+      console.error("[auth] Apple callback failed:", err);
+      fail("apple_failed");
+    }
+  });
+
+  // ─── Sign in with Apple (native iOS app) ─────────────────────────────────
+  // The app signs in with expo-apple-authentication, passing SHA-256(rawNonce)
+  // as the nonce, then posts the identity token and the raw nonce here.
+  app.post("/api/auth/apple/native", async (req, res) => {
+    if (!appleBundleId) return res.status(503).json({ error: "Sign in with Apple isn't set up on this server." });
+    const { identityToken, nonce, fullName } = req.body ?? {};
+    if (typeof identityToken !== "string" || typeof nonce !== "string" || nonce.length < 16) {
+      return res.status(400).json({ error: "identityToken and nonce are required" });
+    }
+    try {
+      const profile = await verifyAppleIdToken(identityToken, { audiences: [appleBundleId], expectedNonce: sha256Hex(nonce) });
+      if (!profile) return res.status(401).json({ error: "Invalid Apple sign-in" });
+      if (!profile.email || !profile.emailVerified) {
+        return res.status(400).json({ error: "Apple didn't share a verified email address" });
+      }
+      const name = [fullName?.givenName, fullName?.familyName].filter(n => typeof n === "string" && n).join(" ");
+      const user = await findOrCreateUser({ provider: "apple", sub: profile.sub, email: profile.email, name: name || undefined });
+      await signIn(req, user.id);
+      res.json(user);
+    } catch (err) {
+      console.error("[auth] Apple native sign-in failed:", err);
+      res.status(500).json({ error: "Apple sign-in failed" });
     }
   });
 

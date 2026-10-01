@@ -25,6 +25,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
+  getUserByAppleId(appleId: string): Promise<User | undefined>;
   getUsersWithRemindersEnabled(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
@@ -126,12 +127,12 @@ export class DatabaseStorage implements IStorage {
 
   // Returns the demo account (alex@example.com), creating it if needed. On a
   // fresh database it becomes user #1, matching the pre-auth single-user data.
-  // An account linked to Google is never used as the demo account, so the demo
+  // An account linked to Google or Apple is never used as the demo account, so the demo
   // button can't open a real user's data.
   async ensureDemoUser(): Promise<User> {
     const existing = await this.getUserByEmail(DEMO_EMAIL);
     if (existing) {
-      if (existing.googleId) throw new Error("Demo account email is linked to a Google account");
+      if (existing.googleId || existing.appleId) throw new Error("Demo account email is linked to a real sign-in");
       return existing;
     }
     const userOneTaken = !!(await this.getUser(1));
@@ -161,6 +162,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByGoogleId(googleId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+    return user || undefined;
+  }
+
+  async getUserByAppleId(appleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.appleId, appleId));
     return user || undefined;
   }
 

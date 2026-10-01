@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   avatar: text("avatar"),
   googleId: text("google_id"), // Google account "sub" claim
+  appleId: text("apple_id"), // Sign in with Apple "sub" claim
   streak: integer("streak").default(0),
   totalCompliance: integer("total_compliance").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -33,6 +34,7 @@ export const users = pgTable("users", {
   // A unique index rather than a constraint so `db:push` can add it to a
   // populated table without prompting to truncate.
   googleIdIdx: uniqueIndex("users_google_id_idx").on(table.googleId),
+  appleIdIdx: uniqueIndex("users_apple_id_idx").on(table.appleId),
 }));
 
 export const protocols = pgTable("protocols", {

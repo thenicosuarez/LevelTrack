@@ -8,6 +8,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "net";
+import { createHash, generateKeyPairSync, sign } from "crypto";
 import type { Server } from "http";
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
@@ -25,6 +26,23 @@ process.env.GOOGLE_CLIENT_SECRET = "test-secret";
 process.env.LEGACY_USER_EMAIL = "owner@example.com";
 delete process.env.DEMO_MODE;
 delete process.env.OPENAI_API_KEY;
+process.env.APPLE_SERVICES_ID = "com.leveltrack.web";
+process.env.APPLE_BUNDLE_ID = "com.leveltrack.app";
+
+// ─── Fake Apple: a test key stands in for Apple's signing key ───────────────
+const appleKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
+function appleToken(claims: Record<string, unknown>): string {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const head = enc({ alg: "RS256", kid: "test-kid" });
+  const body = enc({
+    iss: "https://appleid.apple.com",
+    exp: Math.floor(Date.now() / 1000) + 600,
+    iat: Math.floor(Date.now() / 1000),
+    email_verified: "true",
+    ...claims,
+  });
+  return `${head}.${body}.${sign("RSA-SHA256", Buffer.from(`${head}.${body}`), appleKey.privateKey).toString("base64url")}`;
+}
 delete process.env.APP_BASE_URL;
 
 // ─── Fake Google token endpoint; the auth `code` picks the account ──────────
@@ -58,6 +76,9 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = input instanceof Request ? input.url : String(input);
   if (url === "https://api.openai.com/v1/chat/completions") return fakeOpenAI(init);
+  if (url === "https://appleid.apple.com/auth/keys") {
+    return Response.json({ keys: [{ ...appleKey.publicKey.export({ format: "jwk" }), kid: "test-kid", alg: "RS256", use: "sig" }] });
+  }
   if (url !== "https://oauth2.googleapis.com/token") return realFetch(input, init);
   const body = new URLSearchParams(String(init?.body));
   const code = body.get("code") ?? "";
@@ -148,7 +169,7 @@ const anon = () => client(null);
 
 test("auth config reports Google and demo available", async () => {
   const r = await anon()("GET", "/api/auth/config");
-  assert.deepEqual(r.body, { google: true, demo: true });
+  assert.deepEqual(r.body, { google: true, apple: true, demo: true });
 });
 
 test("signed-out requests to private APIs get 401", async () => {
@@ -221,6 +242,93 @@ test("a second Google user gets a separate account", async () => {
   bob = await signInAs("bob");
   bobId = (await bob("GET", "/api/user")).body.id;
   assert.ok(bobId && bobId !== aliceId);
+});
+
+// ─── Sign in with Apple ──────────────────────────────────────────────────────
+async function appleWebSignIn(opts: {
+  claims?: Record<string, unknown>;
+  user?: unknown;
+  tamperState?: boolean;
+  dropCookie?: boolean;
+  wrongNonce?: boolean;
+  error?: string;
+}) {
+  const start = await realFetch(`${base}/api/auth/apple`, { redirect: "manual" });
+  const authorizeUrl = new URL(start.headers.get("location")!);
+  const appleCookie = start.headers.getSetCookie().find(c => c.startsWith("lt.apple="))?.split(";")[0];
+  const state = authorizeUrl.searchParams.get("state")!;
+  const nonce = authorizeUrl.searchParams.get("nonce")!;
+  const form = new URLSearchParams(opts.error ? { state, error: opts.error } : {
+    state: opts.tamperState ? `x${state.slice(1)}` : state,
+    code: "unused",
+    id_token: appleToken({ aud: "com.leveltrack.web", nonce: opts.wrongNonce ? "other" : nonce, ...opts.claims }),
+    ...(opts.user ? { user: JSON.stringify(opts.user) } : {}),
+  });
+  const cb = await realFetch(`${base}/api/auth/apple/callback`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", ...(opts.dropCookie || !appleCookie ? {} : { Cookie: appleCookie }) },
+    body: form.toString(),
+  });
+  return { start, authorizeUrl, appleCookie, status: cb.status, location: cb.headers.get("location"), cookie: sessionCookie(cb) };
+}
+
+test("Sign in with Apple (web) redirects to Apple with the right parameters", async () => {
+  const r = await appleWebSignIn({ claims: { sub: "apple-carol", email: "carol@privaterelay.appleid.com", is_private_email: "true" }, user: { name: { firstName: "Carol", lastName: "C" } } });
+  assert.equal(r.start.status, 302);
+  assert.equal(r.authorizeUrl.host, "appleid.apple.com");
+  assert.equal(r.authorizeUrl.searchParams.get("client_id"), "com.leveltrack.web");
+  assert.equal(r.authorizeUrl.searchParams.get("response_mode"), "form_post");
+  assert.equal(r.authorizeUrl.searchParams.get("scope"), "name email");
+  assert.equal(r.authorizeUrl.searchParams.get("redirect_uri"), `${base}/api/auth/apple/callback`);
+  assert.match(r.start.headers.getSetCookie().join(";"), /lt\.apple=.*SameSite=None/i);
+  assert.equal(r.status, 303);
+  assert.equal(r.location, "/");
+  const me = (await client(r.cookie)("GET", "/api/user")).body;
+  assert.equal(me.appleId, "apple-carol");
+  assert.equal(me.name, "Carol C", "name from Apple's first-sign-in payload");
+  assert.equal(me.email, "carol@privaterelay.appleid.com");
+});
+
+test("Sign in with Apple reuses the account on later sign-ins (no name sent)", async () => {
+  const again = await client((await appleWebSignIn({ claims: { sub: "apple-carol", email: "carol@privaterelay.appleid.com" } })).cookie)("GET", "/api/user");
+  assert.equal(again.body.name, "Carol C");
+});
+
+test("Sign in with Apple rejects bad callbacks", async () => {
+  const claims = { sub: "apple-x", email: "x@example.com" };
+  assert.equal((await appleWebSignIn({ claims, tamperState: true })).location, "/?auth_error=apple_state_invalid");
+  assert.equal((await appleWebSignIn({ claims, dropCookie: true })).location, "/?auth_error=apple_state_invalid");
+  assert.equal((await appleWebSignIn({ claims, wrongNonce: true })).location, "/?auth_error=apple_failed");
+  assert.equal((await appleWebSignIn({ claims: { ...claims, aud: "com.leveltrack.app" } })).location, "/?auth_error=apple_failed");
+  assert.equal((await appleWebSignIn({ claims: { sub: "apple-x" } })).location, "/?auth_error=apple_no_email");
+  assert.equal((await appleWebSignIn({ error: "user_cancelled_authorize" })).location, "/?auth_error=apple_denied");
+});
+
+test("Apple sign-in with the same verified email links to the existing Google account", async () => {
+  const r = await appleWebSignIn({ claims: { sub: "apple-alice", email: "alice@example.com" } });
+  const me = (await client(r.cookie)("GET", "/api/user")).body;
+  assert.equal(me.id, aliceId);
+  assert.equal(me.googleId, "g-alice");
+  assert.equal(me.appleId, "apple-alice");
+});
+
+test("Sign in with Apple (native iOS app)", async () => {
+  const rawNonce = "a-random-nonce-from-the-phone";
+  const hashed = createHash("sha256").update(rawNonce).digest("hex");
+  const native = (body: unknown) => anon()("POST", "/api/auth/apple/native", body);
+  const token = appleToken({ aud: "com.leveltrack.app", sub: "apple-dana", email: "dana@example.com", nonce: hashed });
+
+  const ok = await native({ identityToken: token, nonce: rawNonce, fullName: { givenName: "Dana", familyName: "D" } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.appleId, "apple-dana");
+  assert.equal(ok.body.name, "Dana D");
+  assert.equal((await client(ok.cookie)("GET", "/api/user")).body.id, ok.body.id, "session cookie works");
+
+  assert.equal((await native({ identityToken: token, nonce: "the-wrong-raw-nonce-value" })).status, 401);
+  const webToken = appleToken({ aud: "com.leveltrack.web", sub: "apple-dana", email: "dana@example.com", nonce: hashed });
+  assert.equal((await native({ identityToken: webToken, nonce: rawNonce })).status, 401, "web token rejected by native endpoint");
+  assert.equal((await native({ identityToken: token })).status, 400);
 });
 
 // ─── Shots, adherence and validation ─────────────────────────────────────────
