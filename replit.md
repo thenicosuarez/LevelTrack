@@ -164,6 +164,12 @@ Preferred communication style: Simple, everyday language.
 - Protocol, tasks, health metrics endpoints (all preserved)
 - `GET /api/analytics/dashboard` — Enhanced dashboard including GLP-1 adherence + weight
 
+## Testing
+- `npm run check` — TypeScript type check (also runs as the first step of `npm run build`, so type errors block a deploy)
+- `npm test` — unit tests, no database needed: shot adherence (`server/adherence.ts`), peptide dosing math (`client/src/lib/peptide-math.ts`), Google token checks (`server/google-token.ts`)
+- `npm run test:integration` — API tests against a real Postgres: sign-in, validation, and that users can't reach each other's data. Needs `TEST_DATABASE_URL` pointing at a **throwaway** database; it is wiped on every run, and the tests refuse to run if it matches `DATABASE_URL`
+- **CI**: `.github/workflows/ci.yml` runs all of the above plus the production build on every pull request and every push to `main`
+
 ## Mobile / App Store Setup
 - PWA manifest at `/public/manifest.json`
 - viewport-fit=cover for iPhone notch

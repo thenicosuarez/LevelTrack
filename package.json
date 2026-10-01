@@ -5,10 +5,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "tsc && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "test": "tsx --test server/*.test.ts",
+    "test": "tsx --test server/*.test.ts client/src/lib/*.test.ts",
+    "test:integration": "DATABASE_URL=\"$TEST_DATABASE_URL\" drizzle-kit push --force && tsx --test --test-force-exit tests/integration/*.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
