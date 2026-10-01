@@ -14,6 +14,22 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### October 2026 - Time Zones, Real Label Scanning, Upload Fix
+- **Time zones**: "today" now follows the user's own calendar. The browser sends its IANA zone in an `X-Timezone` header and saves it to `users.timezone`; the server computes dates with `server/dates.ts`. Before, a US evening shot was logged under tomorrow's date.
+- **Shot reminders** fire at the user's local reminder time on their injection day (they previously fired on the server's UTC clock, e.g. 2 am in California).
+- **Label scanning is real**: `POST /api/scan-label` takes 1–3 compressed label photos and reads them with OpenAI's vision model (`server/label-scan.ts`). Needs `OPENAI_API_KEY`; returns 503 without it, 422 if the photo isn't a readable label. Suggestions only restate label directions, never dosing advice.
+- **Photo uploads**: the JSON body limit was Express's default 100 KB, which rejected most progress photos. Now 12 MB.
+- **Logs** no longer include API response bodies (they contained health data).
+
+### October 2026 - Google Sign-In, Per-User Data & Bug Fixes
+- **Google sign-in** (`server/auth.ts`, `client/src/pages/sign-in.tsx`): OAuth 2.0 / OpenID Connect code flow, no extra packages. Sessions are stored in Postgres (`session` table, 30-day cookie). Every `/api` route now requires sign-in except `/api/auth/*`, `/api/drugs` and `/api/push/vapid-public-key`.
+  - `GET /api/auth/config`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `POST /api/auth/demo`, `POST /api/auth/logout`
+  - Settings page has a **Sign out** button
+- **Per-user data**: the hard-coded `userId = 1` is gone. Every route uses the signed-in user, and every read/update/delete by id checks ownership (another user's records return 404). The reminder scheduler now covers all users.
+- **Demo account**: "Try the demo account" button on by default in development, off in production (override with `DEMO_MODE=true|false`). It never opens an account linked to Google.
+- **Bug fixes**: shot adherence now measured against the injection schedule (`server/adherence.ts`; a weekly injector who never misses = 100%, was ~13%); negative/zero doses, out-of-range pain (0–10) and journal (1–5) scores and malformed dates rejected; `/api/protocols/compliance` no longer swallowed by `/api/protocols/:id`; supplement doses accept decimals (2.5 g); server no longer crashes at startup without `OPENAI_API_KEY`; `PATCH` routes only accept their own fields (no editing streak/email/owner); `/api/debug/db-test` removed; deleting a missing record returns 404; voice notes and label scanner were calling the API with the wrong arguments; 0 TypeScript errors (was 47).
+- **Local dev**: `server/db.ts` uses Neon's driver for `*.neon.tech` URLs and plain `pg` otherwise (override with `DB_DRIVER=neon|pg`). `npm test` runs unit tests.
+
 ### March 2026 - Device Integrations: Withings Scale + Oura Ring (Task #6)
 - **Full OAuth 2.0 flow** for both Withings and Oura Ring:
   - `GET /api/integrations/withings/auth` — initiates OAuth, redirects to Withings consent
@@ -155,6 +171,12 @@ Preferred communication style: Simple, everyday language.
 - Protocol, tasks, health metrics endpoints (all preserved)
 - `GET /api/analytics/dashboard` — Enhanced dashboard including GLP-1 adherence + weight
 
+## Testing
+- `npm run check` — TypeScript type check (also runs as the first step of `npm run build`, so type errors block a deploy)
+- `npm test` — unit tests, no database needed: shot adherence (`server/adherence.ts`), peptide dosing math (`client/src/lib/peptide-math.ts`), Google token checks (`server/google-token.ts`), time zones and reminder timing (`server/dates.ts`)
+- `npm run test:integration` — API tests against a real Postgres: sign-in, validation, and that users can't reach each other's data. Needs `TEST_DATABASE_URL` pointing at a **throwaway** database; it is wiped on every run, and the tests refuse to run if it matches `DATABASE_URL`
+- **CI**: `.github/workflows/ci.yml` runs all of the above plus the production build on every pull request and every push to `main`
+
 ## Mobile / App Store Setup
 - PWA manifest at `/public/manifest.json`
 - viewport-fit=cover for iPhone notch
@@ -163,7 +185,14 @@ Preferred communication style: Simple, everyday language.
 - Capacitor can be added to wrap this as a native iOS/Android app
 
 ## Configuration
-- **Environment Variables**: DATABASE_URL for database connection
+- **Environment Variables**:
+  - `DATABASE_URL` — database connection
+  - `SESSION_SECRET` — **required in production**; any long random string, used to sign login cookies
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google sign-in (Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type "Web application"). Authorized redirect URI: `<APP_BASE_URL>/api/auth/google/callback`
+  - `APP_BASE_URL` — public URL of the app (e.g. `https://leveltrack.example.com`), used for OAuth redirect URIs
+  - `LEGACY_USER_EMAIL` — optional; the first Google sign-in with this email takes over the data that existed before sign-in was added (user #1)
+  - `DEMO_MODE` — optional; `true`/`false` to force the demo button on/off
+  - `OPENAI_API_KEY` — optional; needed for voice notes and label scanning
 - **Build Commands**: npm run build for production, npm run dev for development
 - **Database Migrations**: npm run db:push for schema updates
 
@@ -186,4 +215,4 @@ Preferred communication style: Simple, everyday language.
 - AI coach layer for pattern detection
 - Push notification reminders
 - Clinician/coach shared dashboards
-- Real authentication (currently demo mode with userId=1)
+- Email/password or Apple sign-in alongside Google

@@ -33,17 +33,8 @@ export default function VoiceNoteProcessor({ onProtocolCreated }: VoiceNoteProce
         reader.readAsDataURL(audioData);
       });
 
-      const response = await apiRequest("/api/voice-notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          audioData: base64Audio,
-          userId: 1,
-        }),
-      });
-      return response;
+      const response = await apiRequest("POST", "/api/voice-notes", { audioData: base64Audio });
+      return (await response.json()) as VoiceNote;
     },
     onSuccess: (voiceNote: VoiceNote) => {
       setCurrentVoiceNote(voiceNote);
@@ -66,9 +57,8 @@ export default function VoiceNoteProcessor({ onProtocolCreated }: VoiceNoteProce
   const pollProcessingStatus = (voiceNoteId: number) => {
     const interval = setInterval(async () => {
       try {
-        const voiceNote = await apiRequest(`/api/voice-notes/${voiceNoteId}`, {
-          method: "GET",
-        });
+        const response = await apiRequest("GET", `/api/voice-notes/${voiceNoteId}`);
+        const voiceNote: VoiceNote = await response.json();
         
         if (voiceNote.processingStatus === "completed") {
           clearInterval(interval);
@@ -274,7 +264,7 @@ export default function VoiceNoteProcessor({ onProtocolCreated }: VoiceNoteProce
               </div>
             )}
 
-            {currentVoiceNote.aiAnalysis && (
+            {currentVoiceNote.aiAnalysis != null && (
               <div className="p-4 bg-blue-50 rounded-lg">
                 <h4 className="font-medium mb-2">AI Analysis:</h4>
                 <div className="text-sm text-gray-700">

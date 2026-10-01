@@ -1,4 +1,11 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryCache, MutationCache, QueryClient, QueryFunction } from "@tanstack/react-query";
+import { browserTimeZone } from "@/lib/date-utils";
+
+// Lets the server work out "today" in the user's own time zone.
+function tzHeader(): Record<string, string> {
+  const tz = browserTimeZone();
+  return tz ? { "X-Timezone": tz } : {};
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -14,7 +21,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: { ...tzHeader(), ...(data ? { "Content-Type": "application/json" } : {}) },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -30,6 +37,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
+      headers: tzHeader(),
       credentials: "include",
     });
 
@@ -41,7 +49,17 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
-export const queryClient = new QueryClient({
+// A 401 anywhere means the session ended; clearing the user sends the app
+// back to the sign-in screen.
+function handleUnauthorized(error: unknown) {
+  if (error instanceof Error && error.message.startsWith("401")) {
+    queryClient.setQueryData(["/api/user"], null);
+  }
+}
+
+export const queryClient: QueryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: handleUnauthorized }),
+  mutationCache: new MutationCache({ onError: handleUnauthorized }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),

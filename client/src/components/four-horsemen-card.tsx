@@ -7,10 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useLocation } from "wouter";
 import type { Protocol } from "@shared/schema";
 
-interface ExtendedProtocol extends Protocol {
-  horsemenTags?: string[];
-  windowMode?: string;
-}
+type ExtendedProtocol = Protocol;
 
 interface HorsemanData {
   id: string;

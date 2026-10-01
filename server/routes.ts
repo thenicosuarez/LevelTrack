@@ -1,14 +1,20 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
+import { setupAuth } from "./auth";
+import { openaiConfigured } from "./openai";
+import { scanSupplementLabel, scanLabelRequestSchema, NotALabelError } from "./label-scan";
+import { computeShotAdherence } from "./adherence";
+import { isValidTimeZone, todayIn, zonedParts, shiftDate, reminderDueDate } from "./dates";
 import { z } from "zod";
 import webpush from "web-push";
 import { 
   insertProtocolSchema, insertProtocolItemSchema, insertTaskSchema,
   insertHealthMetricSchema, insertIntegrationSchema, insertVoiceNoteSchema,
   insertGlp1LogSchema, insertSideEffectLogSchema, insertProgressPhotoSchema,
+  updateSideEffectLogSchema,
 } from "@shared/schema";
 
 // ─── VAPID setup ─────────────────────────────────────────────────────────────
@@ -27,10 +33,16 @@ const DAY_ABBREVS: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
 };
 
-function isInjectionDayToday(injectionDay: string | null): boolean {
+function isInjectionDayToday(injectionDay: string | null, tz: string): boolean {
   if (!injectionDay) return false;
-  const todayNum = new Date().getDay();
-  return DAY_ABBREVS[injectionDay] === todayNum;
+  return DAY_ABBREVS[injectionDay] === zonedParts(tz).weekday;
+}
+
+// The browser sends its IANA time zone on every request so "today" matches
+// the user's calendar, not the server's UTC clock.
+function requestTimeZone(req: Request): string {
+  const tz = req.get("X-Timezone");
+  return isValidTimeZone(tz) ? tz : "UTC";
 }
 
 const updateUserSettingsSchema = z.object({
@@ -48,6 +60,7 @@ const updateUserSettingsSchema = z.object({
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   heightCm: z.number().positive().optional().nullable(),
   theme: z.enum(["light", "dark", "system"]).optional(),
+  timezone: z.string().refine(isValidTimeZone, "Unknown time zone").optional(),
 });
 
 const peptideCalcSchema = z.object({
@@ -92,13 +105,35 @@ const GLP1_DRUGS = [
   { name: "Other (custom)", category: "Custom", generic: "", units: ["mg", "mcg", "IU", "units", "ml"], defaultUnit: "mg" },
 ];
 
+const GLP1_DRUG_NAMES = new Set(
+  GLP1_DRUGS.filter(d => d.category.startsWith("GLP-1")).map(d => d.name),
+);
+
+const updateProtocolSchema = insertProtocolSchema.omit({ userId: true }).partial();
+const updateProtocolItemSchema = insertProtocolItemSchema.omit({ protocolId: true }).partial();
+const updateTaskSchema = z.object({
+  completed: z.boolean().optional(),
+  notes: z.string().nullable().optional(),
+});
+const updateIntegrationSchema = insertIntegrationSchema.omit({ userId: true }).partial();
+
+// Parses a numeric :id route param; sends 400 and returns null if invalid.
+function parseId(req: Request, res: Response, param = "id"): number | null {
+  const id = Number(req.params[param]);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: `Invalid ${param}` });
+    return null;
+  }
+  return id;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  const currentUserId = 1; // For demo purposes
+  setupAuth(app);
 
   // ─── User routes ─────────────────────────────────────────────────────────
   app.get("/api/user", async (req, res) => {
     try {
-      const user = await storage.getUser(currentUserId);
+      const user = await storage.getUser(req.userId);
       if (!user) return res.status(404).json({ error: "User not found" });
       res.json(user);
     } catch (error) {
@@ -107,8 +142,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/user", async (req, res) => {
+    const parsed = updateUserSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid user data" });
     try {
-      const user = await storage.updateUser(currentUserId, req.body);
+      const user = await storage.updateUser(req.userId, parsed.data);
       res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
@@ -118,7 +155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/user/settings", async (req, res) => {
     try {
       const validatedData = updateUserSettingsSchema.parse(req.body);
-      const user = await storage.updateUser(currentUserId, validatedData);
+      const user = await storage.updateUser(req.userId, validatedData);
       res.json(user);
     } catch (error) {
       res.status(400).json({ error: "Invalid settings data" });
@@ -133,108 +170,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Protocol routes ──────────────────────────────────────────────────────
   app.get("/api/protocols", async (req, res) => {
     try {
-      const protocols = await storage.getProtocols(currentUserId);
+      const protocols = await storage.getProtocols(req.userId);
       res.json(protocols);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch protocols" });
     }
   });
 
-  app.get("/api/protocols/:id", async (req, res) => {
-    try {
-      const protocol = await storage.getProtocol(parseInt(req.params.id));
-      if (!protocol) return res.status(404).json({ error: "Protocol not found" });
-      res.json(protocol);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch protocol" });
-    }
-  });
-
-  app.post("/api/protocols", async (req, res) => {
-    try {
-      const validatedData = insertProtocolSchema.parse({ ...req.body, userId: currentUserId });
-      const protocol = await storage.createProtocol(validatedData);
-      res.json(protocol);
-    } catch (error) {
-      res.status(400).json({ error: "Invalid protocol data" });
-    }
-  });
-
-  app.patch("/api/protocols/:id", async (req, res) => {
-    try {
-      const protocol = await storage.updateProtocol(parseInt(req.params.id), req.body);
-      res.json(protocol);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update protocol" });
-    }
-  });
-
-  app.delete("/api/protocols/:id", async (req, res) => {
-    try {
-      await storage.deleteProtocol(parseInt(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to delete protocol" });
-    }
-  });
-
-  // ─── Protocol items ───────────────────────────────────────────────────────
-  app.get("/api/protocols/:id/items", async (req, res) => {
-    try {
-      const items = await storage.getProtocolItems(parseInt(req.params.id));
-      res.json(items);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch protocol items" });
-    }
-  });
-
-  app.post("/api/protocols/:id/items", async (req, res) => {
-    try {
-      const validatedData = insertProtocolItemSchema.parse({ ...req.body, protocolId: parseInt(req.params.id) });
-      const item = await storage.createProtocolItem(validatedData);
-      res.json(item);
-    } catch (error) {
-      res.status(400).json({ error: "Invalid protocol item data" });
-    }
-  });
-
-  app.patch("/api/protocol-items/:id", async (req, res) => {
-    try {
-      const item = await storage.updateProtocolItem(parseInt(req.params.id), req.body);
-      res.json(item);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update protocol item" });
-    }
-  });
-
-  app.delete("/api/protocol-items/:id", async (req, res) => {
-    try {
-      await storage.deleteProtocolItem(parseInt(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to delete protocol item" });
-    }
-  });
-
-  app.delete("/api/protocols/:id/items", async (req, res) => {
-    try {
-      await storage.deleteProtocolItems(parseInt(req.params.id));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to delete protocol items" });
-    }
-  });
-
-  // ─── Protocol compliance ──────────────────────────────────────────────────
+  // Registered before /api/protocols/:id so "compliance" isn't read as an id.
   app.get("/api/protocols/compliance", async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
-      const protocols = await storage.getProtocols(currentUserId);
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDateObj = new Date();
-      startDateObj.setDate(startDateObj.getDate() - days);
-      const startDate = startDateObj.toISOString().split('T')[0];
-      const allTasks = await storage.getTasks(currentUserId);
+      const protocols = await storage.getProtocols(req.userId);
+      const endDate = todayIn(requestTimeZone(req));
+      const startDate = shiftDate(endDate, -days);
+      const allTasks = await storage.getTasks(req.userId);
       const relevantTasks = allTasks.filter(t => t.date >= startDate && t.date <= endDate);
       const complianceData: Record<number, { total: number; completed: number }> = {};
       protocols.forEach(p => { complianceData[p.id] = { total: 0, completed: 0 }; });
@@ -254,11 +204,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/protocols/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      const protocol = await storage.getProtocol(id, req.userId);
+      if (!protocol) return res.status(404).json({ error: "Protocol not found" });
+      res.json(protocol);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protocol" });
+    }
+  });
+
+  app.post("/api/protocols", async (req, res) => {
+    try {
+      const validatedData = insertProtocolSchema.parse({ ...req.body, userId: req.userId });
+      const protocol = await storage.createProtocol(validatedData);
+      res.json(protocol);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid protocol data" });
+    }
+  });
+
+  app.patch("/api/protocols/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    const parsed = updateProtocolSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid protocol data" });
+    try {
+      const protocol = await storage.updateProtocol(id, req.userId, parsed.data);
+      if (!protocol) return res.status(404).json({ error: "Protocol not found" });
+      res.json(protocol);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update protocol" });
+    }
+  });
+
+  app.delete("/api/protocols/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      const deleted = await storage.deleteProtocol(id, req.userId);
+      if (!deleted) return res.status(404).json({ error: "Protocol not found" });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol" });
+    }
+  });
+
+  // ─── Protocol items ───────────────────────────────────────────────────────
+  app.get("/api/protocols/:id/items", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      if (!await storage.getProtocol(id, req.userId)) return res.status(404).json({ error: "Protocol not found" });
+      const items = await storage.getProtocolItems(id);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch protocol items" });
+    }
+  });
+
+  app.post("/api/protocols/:id/items", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      if (!await storage.getProtocol(id, req.userId)) return res.status(404).json({ error: "Protocol not found" });
+      const validatedData = insertProtocolItemSchema.parse({ ...req.body, protocolId: id });
+      const item = await storage.createProtocolItem(validatedData);
+      res.json(item);
+    } catch (error) {
+      res.status(400).json({ error: "Invalid protocol item data" });
+    }
+  });
+
+  app.patch("/api/protocol-items/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    const parsed = updateProtocolItemSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid protocol item data" });
+    try {
+      if (await storage.getProtocolItemOwner(id) !== req.userId) return res.status(404).json({ error: "Protocol item not found" });
+      const item = await storage.updateProtocolItem(id, parsed.data);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update protocol item" });
+    }
+  });
+
+  app.delete("/api/protocol-items/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      if (await storage.getProtocolItemOwner(id) !== req.userId) return res.status(404).json({ error: "Protocol item not found" });
+      await storage.deleteProtocolItem(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol item" });
+    }
+  });
+
+  app.delete("/api/protocols/:id/items", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    try {
+      if (!await storage.getProtocol(id, req.userId)) return res.status(404).json({ error: "Protocol not found" });
+      await storage.deleteProtocolItems(id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete protocol items" });
+    }
+  });
+
   // ─── Tasks ────────────────────────────────────────────────────────────────
   app.get("/api/tasks", async (req, res) => {
     try {
       const date = req.query.date as string;
-      const tasks = await storage.getTasks(currentUserId, date);
+      const tasks = await storage.getTasks(req.userId, date);
       res.json(tasks);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tasks" });
@@ -268,8 +322,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tasks/generate", async (req, res) => {
     try {
       const { date } = req.body;
-      const targetDate = date || new Date().toISOString().split('T')[0];
-      const protocols = await storage.getProtocols(currentUserId);
+      const targetDate = date || todayIn(requestTimeZone(req));
+      const protocols = await storage.getProtocols(req.userId);
       const activeProtocols = protocols.filter(p => {
         if (p.startDate && p.startDate > targetDate) return false;
         return p.isActive;
@@ -278,13 +332,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const protocol of activeProtocols) {
         const items = await storage.getProtocolItems(protocol.id);
         for (const item of items) {
-          const existingTasks = await storage.getTasks(currentUserId, targetDate);
+          const existingTasks = await storage.getTasks(req.userId, targetDate);
           const taskExists = existingTasks.some(t =>
             t.protocolId === protocol.id && t.protocolItemId === item.id && t.date === targetDate
           );
           if (!taskExists) {
             const task = await storage.createTask({
-              userId: currentUserId, protocolId: protocol.id,
+              userId: req.userId, protocolId: protocol.id,
               protocolItemId: item.id, date: targetDate, completed: false, notes: null,
             });
             generatedTasks.push(task);
@@ -299,7 +353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/tasks", async (req, res) => {
     try {
-      const validatedData = insertTaskSchema.parse({ ...req.body, userId: currentUserId });
+      const validatedData = insertTaskSchema.parse({ ...req.body, userId: req.userId });
       const task = await storage.createTask(validatedData);
       res.json(task);
     } catch (error) {
@@ -308,11 +362,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/tasks/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    const parsed = updateTaskSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid task data" });
     try {
-      const updates = req.body;
-      if (updates.completed === true && !updates.completedAt) delete updates.completedAt;
-      else if (updates.completed === false) updates.completedAt = null;
-      const task = await storage.updateTask(parseInt(req.params.id), updates);
+      const updates: { completed?: boolean; notes?: string | null; completedAt?: Date | null } = { ...parsed.data };
+      if (updates.completed === false) updates.completedAt = null;
+      const task = await storage.updateTask(id, req.userId, updates);
+      if (!task) return res.status(404).json({ error: "Task not found" });
       res.json(task);
     } catch (error) {
       res.status(500).json({ error: "Failed to update task" });
@@ -323,7 +380,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
-      const tasks = await storage.getTasksForDateRange(currentUserId, startDate as string, endDate as string);
+      const tasks = await storage.getTasksForDateRange(req.userId, startDate as string, endDate as string);
       res.json(tasks);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch tasks for date range" });
@@ -334,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health-metrics", async (req, res) => {
     try {
       const date = req.query.date as string;
-      const metrics = await storage.getHealthMetrics(currentUserId, date);
+      const metrics = await storage.getHealthMetrics(req.userId, date);
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch health metrics" });
@@ -343,7 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/health-metrics", async (req, res) => {
     try {
-      const validatedData = insertHealthMetricSchema.parse({ ...req.body, userId: currentUserId });
+      const validatedData = insertHealthMetricSchema.parse({ ...req.body, userId: req.userId });
       const metric = await storage.createHealthMetric(validatedData);
       res.json(metric);
     } catch (error) {
@@ -355,7 +412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
-      const metrics = await storage.getHealthMetricsForDateRange(currentUserId, startDate as string, endDate as string);
+      const metrics = await storage.getHealthMetricsForDateRange(req.userId, startDate as string, endDate as string);
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch health metrics for date range" });
@@ -365,7 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Integrations ─────────────────────────────────────────────────────────
   app.get("/api/integrations", async (req, res) => {
     try {
-      const integrations = await storage.getIntegrations(currentUserId);
+      const integrations = await storage.getIntegrations(req.userId);
       res.json(integrations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch integrations" });
@@ -374,7 +431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/integrations", async (req, res) => {
     try {
-      const validatedData = insertIntegrationSchema.parse({ ...req.body, userId: currentUserId });
+      const validatedData = insertIntegrationSchema.parse({ ...req.body, userId: req.userId });
       const integration = await storage.createIntegration(validatedData);
       res.json(integration);
     } catch (error) {
@@ -383,8 +440,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/integrations/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    const parsed = updateIntegrationSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid integration data" });
     try {
-      const integration = await storage.updateIntegration(parseInt(req.params.id), req.body);
+      const integration = await storage.updateUserIntegration(id, req.userId, parsed.data);
+      if (!integration) return res.status(404).json({ error: "Integration not found" });
       res.json(integration);
     } catch (error) {
       res.status(500).json({ error: "Failed to update integration" });
@@ -394,18 +455,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Dashboard analytics ──────────────────────────────────────────────────
   app.get("/api/analytics/dashboard", async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const today = todayIn(requestTimeZone(req));
+      const weekAgo = shiftDate(today, -7);
 
-      const [todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics, allPhotos] = await Promise.all([
-        storage.getTasks(currentUserId, today),
-        storage.getTasksForDateRange(currentUserId, weekAgo, today),
-        storage.getHealthMetrics(currentUserId, today),
-        storage.getTodayGlp1Log(currentUserId, today),
-        storage.getGlp1Logs(currentUserId),
-        storage.getHealthMetrics(currentUserId), // all-time, for accurate weight history
-        storage.getProgressPhotos(currentUserId),
+      const [user, todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics, allPhotos] = await Promise.all([
+        storage.getUser(req.userId),
+        storage.getTasks(req.userId, today),
+        storage.getTasksForDateRange(req.userId, weekAgo, today),
+        storage.getHealthMetrics(req.userId, today),
+        storage.getTodayGlp1Log(req.userId, today),
+        storage.getGlp1Logs(req.userId),
+        storage.getHealthMetrics(req.userId), // all-time, for accurate weight history
+        storage.getProgressPhotos(req.userId),
       ]);
 
       const todayCompleted = todayTasks.filter(t => t.completed).length;
@@ -418,9 +479,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const latestMetrics = healthMetrics.length > 0 ? healthMetrics[0] : null;
 
-      // Calculate 30-day shot adherence
-      const glp1DaysIn30 = recentGlp1.filter(m => m.date >= thirtyDaysAgo).length;
-      const glp1Adherence = Math.min(Math.round((glp1DaysIn30 / 30) * 100), 100);
+      // 30-day shot adherence against the user's injection schedule. Only GLP-1
+      // shots count, so daily peptide injections don't inflate it.
+      const glp1Adherence = computeShotAdherence({
+        shotDates: recentGlp1
+          .filter(l => GLP1_DRUG_NAMES.has(l.drugName) || l.drugName === user?.glp1Drug)
+          .map(l => l.date),
+        frequency: user?.glp1InjectionFrequency,
+        startDate: user?.glp1StartDate,
+        today,
+      });
 
       // Latest weight — most recent dated entry across both sources
       const allWeightEntriesRaw = [
@@ -456,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         latestWeight,
         totalWeightLost,
         weeklyData: Array.from({ length: 7 }, (_, i) => {
-          const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const date = shiftDate(today, -i);
           const dayTasks = weekTasks.filter(t => t.date === date);
           const dayCompleted = dayTasks.filter(t => t.completed).length;
           const dayTotal = dayTasks.length;
@@ -474,7 +542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Voice Notes ──────────────────────────────────────────────────────────
   app.get("/api/voice-notes", async (req, res) => {
     try {
-      const voiceNotes = await storage.getVoiceNotes(currentUserId);
+      const voiceNotes = await storage.getVoiceNotes(req.userId);
       res.json(voiceNotes);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch voice notes" });
@@ -483,7 +551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/voice-notes/:id", async (req, res) => {
     try {
-      const voiceNote = await storage.getVoiceNote(parseInt(req.params.id));
+      const voiceNote = await storage.getVoiceNote(parseInt(req.params.id), req.userId);
       if (!voiceNote) return res.status(404).json({ error: "Voice note not found" });
       res.json(voiceNote);
     } catch (error) {
@@ -493,9 +561,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/voice-notes", async (req, res) => {
     try {
-      const validatedData = insertVoiceNoteSchema.parse({ ...req.body, userId: currentUserId });
+      const validatedData = insertVoiceNoteSchema.parse({ ...req.body, userId: req.userId });
       const voiceNote = await storage.createVoiceNote(validatedData);
-      processVoiceNoteAsync(voiceNote.id, req.body.audioData);
+      processVoiceNoteAsync(voiceNote.id, req.userId, req.body.audioData);
       res.json(voiceNote);
     } catch (error) {
       res.status(400).json({ error: "Invalid voice note data" });
@@ -504,32 +572,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Label scanning ───────────────────────────────────────────────────────
   app.post("/api/scan-label", async (req, res) => {
+    if (!openaiConfigured()) {
+      return res.status(503).json({ error: "Label scanning isn't set up on this server (OPENAI_API_KEY missing)." });
+    }
+    const parsed = scanLabelRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Send 1-3 label photos as image data URLs." });
     try {
-      setTimeout(() => {
-        res.json({
-          supplementName: "Magnesium Glycinate",
-          brand: "Thorne",
-          dosageAmount: "200",
-          dosageUnit: "mg",
-          servingSize: "2 capsules",
-          ingredients: ["Magnesium Glycinate", "Hypromellose", "Microcrystalline Cellulose"],
-          confidence: 92,
-          suggestions: [
-            "Take with food for better absorption",
-            "Consider timing before bedtime for sleep benefits",
-            "Start with 1 capsule to assess tolerance"
-          ]
-        });
-      }, 1000);
+      res.json(await scanSupplementLabel(parsed.data.images));
     } catch (error) {
-      res.status(500).json({ error: "Failed to process label scan" });
+      if (error instanceof NotALabelError) {
+        return res.status(422).json({ error: "Couldn't read a supplement label in those photos. Try a closer, well-lit shot." });
+      }
+      console.error("Label scan failed:", error);
+      res.status(502).json({ error: "Label scanning failed. Please try again." });
     }
   });
 
   // ─── GLP-1 Logs ───────────────────────────────────────────────────────────
   app.get("/api/glp1-logs", async (req, res) => {
     try {
-      const logs = await storage.getGlp1Logs(currentUserId);
+      const logs = await storage.getGlp1Logs(req.userId);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch GLP-1 logs" });
@@ -540,7 +602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
-      const logs = await storage.getGlp1LogsForDateRange(currentUserId, startDate as string, endDate as string);
+      const logs = await storage.getGlp1LogsForDateRange(req.userId, startDate as string, endDate as string);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch GLP-1 logs for date range" });
@@ -548,8 +610,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/glp1-logs/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
     try {
-      const log = await storage.getGlp1Log(parseInt(req.params.id));
+      const log = await storage.getGlp1Log(id, req.userId);
       if (!log) return res.status(404).json({ error: "GLP-1 log not found" });
       res.json(log);
     } catch (error) {
@@ -559,7 +622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/glp1-logs", async (req, res) => {
     try {
-      const validatedData = insertGlp1LogSchema.parse({ ...req.body, userId: currentUserId });
+      const validatedData = insertGlp1LogSchema.parse({ ...req.body, userId: req.userId });
       const log = await storage.createGlp1Log(validatedData);
       res.json(log);
     } catch (error) {
@@ -569,8 +632,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/glp1-logs/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
     try {
-      await storage.deleteGlp1Log(parseInt(req.params.id));
+      const deleted = await storage.deleteGlp1Log(id, req.userId);
+      if (!deleted) return res.status(404).json({ error: "GLP-1 log not found" });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete GLP-1 log" });
@@ -580,7 +645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Side Effect Logs ─────────────────────────────────────────────────────
   app.get("/api/side-effect-logs", async (req, res) => {
     try {
-      const logs = await storage.getSideEffectLogs(currentUserId);
+      const logs = await storage.getSideEffectLogs(req.userId);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch side effect logs" });
@@ -589,8 +654,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/side-effect-logs/today", async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const log = await storage.getTodaySideEffectLog(currentUserId, today);
+      const today = todayIn(requestTimeZone(req));
+      const log = await storage.getTodaySideEffectLog(req.userId, today);
       res.json(log || null);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch today's side effect log" });
@@ -599,8 +664,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/side-effect-logs", async (req, res) => {
     try {
-      const validatedData = insertSideEffectLogSchema.parse({ ...req.body, userId: currentUserId });
-      const existing = await storage.getTodaySideEffectLog(currentUserId, validatedData.date);
+      const validatedData = insertSideEffectLogSchema.parse({ ...req.body, userId: req.userId });
+      const existing = await storage.getTodaySideEffectLog(req.userId, validatedData.date);
       if (existing) {
         return res.status(409).json({ error: "A journal entry already exists for this date. Use PATCH to update it.", existingId: existing.id });
       }
@@ -613,8 +678,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.patch("/api/side-effect-logs/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
+    const parsed = updateSideEffectLogSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid side effect log data" });
     try {
-      const log = await storage.updateSideEffectLog(parseInt(req.params.id), req.body);
+      const log = await storage.updateSideEffectLog(id, req.userId, parsed.data);
+      if (!log) return res.status(404).json({ error: "Side effect log not found" });
       res.json(log);
     } catch (error) {
       res.status(500).json({ error: "Failed to update side effect log" });
@@ -625,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = req.query;
       if (!startDate || !endDate) return res.status(400).json({ error: "Start date and end date are required" });
-      const logs = await storage.getSideEffectLogsForDateRange(currentUserId, startDate as string, endDate as string);
+      const logs = await storage.getSideEffectLogsForDateRange(req.userId, startDate as string, endDate as string);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch side effect logs for date range" });
@@ -635,7 +704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Progress Photos ──────────────────────────────────────────────────────
   app.get("/api/progress-photos", async (req, res) => {
     try {
-      const photos = await storage.getProgressPhotos(currentUserId);
+      const photos = await storage.getProgressPhotos(req.userId);
       res.json(photos);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch progress photos" });
@@ -647,7 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cleanBody = Object.fromEntries(
         Object.entries(req.body).filter(([_, v]) => v !== null && v !== undefined)
       );
-      const validatedData = insertProgressPhotoSchema.parse({ ...cleanBody, userId: currentUserId });
+      const validatedData = insertProgressPhotoSchema.parse({ ...cleanBody, userId: req.userId });
       const photo = await storage.createProgressPhoto(validatedData);
       res.json(photo);
     } catch (error) {
@@ -657,8 +726,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.delete("/api/progress-photos/:id", async (req, res) => {
+    const id = parseId(req, res); if (id === null) return;
     try {
-      await storage.deleteProgressPhoto(parseInt(req.params.id));
+      const deleted = await storage.deleteProgressPhoto(id, req.userId);
+      if (!deleted) return res.status(404).json({ error: "Progress photo not found" });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete progress photo" });
@@ -678,7 +749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid subscription data" });
       }
       const sub = await storage.upsertPushSubscription({
-        userId: currentUserId,
+        userId: req.userId,
         endpoint,
         p256dh: keys.p256dh,
         auth: keys.auth,
@@ -693,7 +764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { endpoint } = req.body;
       if (!endpoint) return res.status(400).json({ error: "endpoint required" });
-      await storage.deletePushSubscription(endpoint);
+      await storage.deletePushSubscription(endpoint, req.userId);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to remove subscription" });
@@ -702,14 +773,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/push/send-reminder", async (req, res) => {
     try {
-      const user = await storage.getUser(currentUserId);
+      const user = await storage.getUser(req.userId);
       if (!user) return res.status(404).json({ error: "User not found" });
       if (!user.reminderEnabled) return res.json({ sent: false, reason: "reminders disabled" });
-      if (!isInjectionDayToday(user.glp1InjectionDay)) {
+      if (!isInjectionDayToday(user.glp1InjectionDay, requestTimeZone(req))) {
         return res.json({ sent: false, reason: "not injection day" });
       }
 
-      const subs = await storage.getPushSubscriptions(currentUserId);
+      const subs = await storage.getPushSubscriptions(req.userId);
       if (subs.length === 0) return res.json({ sent: false, reason: "no subscriptions" });
 
       const drugName = user.glp1Drug ?? "GLP-1";
@@ -738,9 +809,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check if today is an injection day for the current user (used for in-app banner)
   app.get("/api/push/is-injection-day", async (req, res) => {
     try {
-      const user = await storage.getUser(currentUserId);
+      const user = await storage.getUser(req.userId);
       if (!user) return res.json({ isInjectionDay: false });
-      res.json({ isInjectionDay: isInjectionDayToday(user.glp1InjectionDay) });
+      res.json({ isInjectionDay: isInjectionDayToday(user.glp1InjectionDay, requestTimeZone(req)) });
     } catch (error) {
       res.status(500).json({ error: "Failed to check injection day" });
     }
@@ -749,7 +820,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Peptide Calculator routes ────────────────────────────────────────────
   app.get("/api/peptide-calcs", async (req, res) => {
     try {
-      const calcs = await storage.getPeptideCalculations(currentUserId);
+      const tz = requestTimeZone(req);
+      const calcs = await storage.getPeptideCalculations(req.userId);
       const withLogs = await Promise.all(calcs.map(async (calc) => {
         const logs = await storage.getVialLogs(calc.id);
 
@@ -757,7 +829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const logDates = Array.from(new Set(
           logs
             .filter(l => l.loggedAt != null)
-            .map(l => new Date(l.loggedAt!).toISOString().split("T")[0])
+            .map(l => todayIn(tz, new Date(l.loggedAt!)))
         )).sort().reverse(); // most recent first
 
         let streak = 0;
@@ -768,9 +840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           for (const d of logDates) {
             if (d === expected) {
               streak++;
-              const prev = new Date(expected);
-              prev.setDate(prev.getDate() - 1);
-              expected = prev.toISOString().split("T")[0];
+              expected = shiftDate(expected, -1);
             } else if (d < expected) {
               break;
             }
@@ -791,23 +861,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/peptide-calcs", async (req, res) => {
     try {
       const data = peptideCalcSchema.parse(req.body);
-      const calc = await storage.createPeptideCalculation({ ...data, userId: currentUserId });
+      const calc = await storage.createPeptideCalculation({ ...data, userId: req.userId });
       res.json(calc);
     } catch (e) { res.status(400).json({ error: "Invalid data" }); }
   });
 
   // Helper: resolve a peptide calc by id and assert ownership
-  async function resolvePeptideCalc(id: number, res: import("express").Response) {
+  async function resolvePeptideCalc(id: number, userId: number, res: Response) {
     const calc = await storage.getPeptideCalculation(id);
-    if (!calc) { res.status(404).json({ error: "Not found" }); return null; }
-    if (calc.userId !== currentUserId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    if (!calc || calc.userId !== userId) { res.status(404).json({ error: "Not found" }); return null; }
     return calc;
   }
 
   app.patch("/api/peptide-calcs/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (!await resolvePeptideCalc(id, res)) return;
+      if (!await resolvePeptideCalc(id, req.userId, res)) return;
       const data = peptideCalcSchema.partial().parse(req.body);
       const calc = await storage.updatePeptideCalculation(id, data as Parameters<typeof storage.updatePeptideCalculation>[1]);
       res.json(calc);
@@ -817,7 +886,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/peptide-calcs/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (!await resolvePeptideCalc(id, res)) return;
+      if (!await resolvePeptideCalc(id, req.userId, res)) return;
       await storage.deletePeptideCalculation(id);
       res.json({ success: true });
     } catch { res.status(500).json({ error: "Failed to delete" }); }
@@ -826,7 +895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/peptide-calcs/:id/logs", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (!await resolvePeptideCalc(id, res)) return;
+      if (!await resolvePeptideCalc(id, req.userId, res)) return;
       const logs = await storage.getVialLogs(id);
       res.json(logs);
     } catch { res.status(500).json({ error: "Failed to fetch logs" }); }
@@ -835,8 +904,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/peptide-calcs/:id/logs", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (!await resolvePeptideCalc(id, res)) return;
-      const log = await storage.createVialLog(id, currentUserId);
+      if (!await resolvePeptideCalc(id, req.userId, res)) return;
+      const log = await storage.createVialLog(id, req.userId);
       res.json(log);
     } catch { res.status(500).json({ error: "Failed to log dose" }); }
   });
@@ -844,7 +913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/peptide-calcs/:id/logs/last", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (!await resolvePeptideCalc(id, res)) return;
+      if (!await resolvePeptideCalc(id, req.userId, res)) return;
       await storage.deleteLastVialLog(id);
       res.json({ success: true });
     } catch { res.status(500).json({ error: "Failed to undo" }); }
@@ -885,8 +954,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ONE_HOUR_MS = 60 * 60 * 1000;
 
       const [withingsInt, ouraInt] = await Promise.all([
-        storage.getIntegrationByPlatform(currentUserId, "withings"),
-        storage.getIntegrationByPlatform(currentUserId, "oura"),
+        storage.getIntegrationByPlatform(req.userId, "withings"),
+        storage.getIntegrationByPlatform(req.userId, "oura"),
       ]);
 
       const withingsStale = withingsInt?.isActive && withingsInt?.accessToken &&
@@ -895,8 +964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (Date.now() - (ouraInt.lastSync ? new Date(ouraInt.lastSync).getTime() : 0)) > ONE_HOUR_MS;
 
       const [withingsResult, ouraResult] = await Promise.all([
-        withingsStale ? syncWithingsWeights(currentUserId) : Promise.resolve({ synced: 0 }),
-        ouraStale ? syncOuraSleep(currentUserId) : Promise.resolve({ synced: 0 }),
+        withingsStale ? syncWithingsWeights(req.userId) : Promise.resolve({ synced: 0 }),
+        ouraStale ? syncOuraSleep(req.userId) : Promise.resolve({ synced: 0 }),
       ]);
 
       res.json({
@@ -916,8 +985,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/device-integrations", async (req, res) => {
     try {
       const [withings, oura] = await Promise.all([
-        storage.getIntegrationByPlatform(currentUserId, "withings"),
-        storage.getIntegrationByPlatform(currentUserId, "oura"),
+        storage.getIntegrationByPlatform(req.userId, "withings"),
+        storage.getIntegrationByPlatform(req.userId, "oura"),
       ]);
       const withingsEnabled = !!(process.env.WITHINGS_CLIENT_ID && process.env.WITHINGS_CLIENT_SECRET);
       const ouraEnabled = !!(process.env.OURA_CLIENT_ID && process.env.OURA_CLIENT_SECRET);
@@ -993,7 +1062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? Date.now() + tokenData.body.expires_in * 1000
         : undefined;
 
-      await storage.upsertIntegrationByPlatform(currentUserId, "withings", {
+      await storage.upsertIntegrationByPlatform(req.userId, "withings", {
         accessToken: tokenData.body.access_token,
         refreshToken: tokenData.body.refresh_token,
         isActive: true,
@@ -1002,7 +1071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Trigger initial sync in background
       const { syncWithingsWeights } = await import("./device-sync");
-      syncWithingsWeights(currentUserId).catch(console.error);
+      syncWithingsWeights(req.userId).catch(console.error);
 
       res.redirect("/settings?connected=withings");
     } catch {
@@ -1012,7 +1081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/integrations/withings", async (req, res) => {
     try {
-      await storage.deleteIntegrationByPlatform(currentUserId, "withings");
+      await storage.deleteIntegrationByPlatform(req.userId, "withings");
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to disconnect Withings" });
@@ -1022,7 +1091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/integrations/withings/sync", async (req, res) => {
     try {
       const { syncWithingsWeights } = await import("./device-sync");
-      const result = await syncWithingsWeights(currentUserId);
+      const result = await syncWithingsWeights(req.userId);
       res.json(result);
     } catch {
       res.status(500).json({ error: "Sync failed" });
@@ -1083,7 +1152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? Date.now() + tokenData.expires_in * 1000
         : undefined;
 
-      await storage.upsertIntegrationByPlatform(currentUserId, "oura", {
+      await storage.upsertIntegrationByPlatform(req.userId, "oura", {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token ?? null,
         isActive: true,
@@ -1092,7 +1161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Trigger initial sync in background
       const { syncOuraSleep } = await import("./device-sync");
-      syncOuraSleep(currentUserId).catch(console.error);
+      syncOuraSleep(req.userId).catch(console.error);
 
       res.redirect("/settings?connected=oura");
     } catch {
@@ -1102,7 +1171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/integrations/oura", async (req, res) => {
     try {
-      await storage.deleteIntegrationByPlatform(currentUserId, "oura");
+      await storage.deleteIntegrationByPlatform(req.userId, "oura");
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to disconnect Oura" });
@@ -1112,7 +1181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/integrations/oura/sync", async (req, res) => {
     try {
       const { syncOuraSleep } = await import("./device-sync");
-      const result = await syncOuraSleep(currentUserId);
+      const result = await syncOuraSleep(req.userId);
       res.json(result);
     } catch {
       res.status(500).json({ error: "Sync failed" });
@@ -1124,23 +1193,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = req.query;
       const logs = await storage.getOuraDailyLogs(
-        currentUserId,
+        req.userId,
         startDate as string | undefined,
         endDate as string | undefined
       );
       res.json(logs);
     } catch {
       res.status(500).json({ error: "Failed to fetch Oura data" });
-    }
-  });
-
-  // ─── Debug endpoints ──────────────────────────────────────────────────────
-  app.get("/api/debug/db-test", async (req, res) => {
-    try {
-      const protocols = await storage.getProtocols(currentUserId);
-      res.json({ success: true, protocolCount: protocols.length, currentUserId });
-    } catch (error) {
-      res.status(500).json({ error: "Database connection failed", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -1158,45 +1217,42 @@ export function startReminderScheduler(): void {
   const tick = async () => {
     try {
       const now = new Date();
-      const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const today = now.toISOString().split("T")[0];
 
-      // Reset the dedup set each day
-      const dayPrefix = `${today}:`;
+      // Forget dedup entries older than yesterday (UTC); local dates span ±1 day.
+      const oldest = shiftDate(todayIn("UTC", now), -1);
       for (const key of notifiedToday) {
-        if (!key.startsWith(dayPrefix)) notifiedToday.delete(key);
+        if (key.slice(0, 10) < oldest) notifiedToday.delete(key);
       }
 
-      // For demo: only user #1. In production, iterate all users.
-      const user = await storage.getUser(1);
-      if (!user) return;
-      if (!user.reminderEnabled) return;
-      if (!user.reminderTime || user.reminderTime !== currentHHMM) return;
-      if (!isInjectionDayToday(user.glp1InjectionDay)) return;
+      const users = await storage.getUsersWithRemindersEnabled();
+      for (const user of users) {
+        const localDate = reminderDueDate(user, now);
+        if (!localDate) continue;
 
-      const dedupKey = `${today}:${user.id}`;
-      if (notifiedToday.has(dedupKey)) return;
-      notifiedToday.add(dedupKey);
+        const dedupKey = `${localDate}:${user.id}`;
+        if (notifiedToday.has(dedupKey)) continue;
+        notifiedToday.add(dedupKey);
 
-      const subs = await storage.getPushSubscriptions(user.id);
-      if (subs.length === 0) return;
+        const subs = await storage.getPushSubscriptions(user.id);
+        if (subs.length === 0) continue;
 
-      const drugName = user.glp1Drug ?? "GLP-1";
-      const payload = JSON.stringify({
-        title: "LevelTrack — Shot Day!",
-        body: `Time for your ${drugName} injection 💉 Tap to log it.`,
-        icon: "/icon.svg",
-        url: "/log-shot",
-      });
+        const drugName = user.glp1Drug ?? "GLP-1";
+        const payload = JSON.stringify({
+          title: "LevelTrack — Shot Day!",
+          body: `Time for your ${drugName} injection 💉 Tap to log it.`,
+          icon: "/icon.svg",
+          url: "/log-shot",
+        });
 
-      await Promise.allSettled(
-        subs.map((sub) =>
-          webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            payload
-          ).catch(() => {}) // swallow individual failures gracefully
-        )
-      );
+        await Promise.allSettled(
+          subs.map((sub) =>
+            webpush.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              payload
+            ).catch(() => {}) // swallow individual failures gracefully
+          )
+        );
+      }
     } catch {
       // scheduler errors should never crash the process
     }

@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Moon, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { HealthMetric } from "@shared/schema";
+import { formatDate } from "@/lib/date-utils";
 
 interface SleepTrendsProps {
   days?: number;
@@ -15,7 +16,7 @@ export default function SleepTrends({ days = 30 }: SleepTrendsProps) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       const response = await fetch(
-        `/api/health-metrics/range?startDate=${startDate.toISOString().split('T')[0]}&endDate=${endDate.toISOString().split('T')[0]}`
+        `/api/health-metrics/range?startDate=${formatDate(startDate)}&endDate=${formatDate(endDate)}`
       );
       return response.json();
     },

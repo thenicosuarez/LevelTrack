@@ -17,7 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
-import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw, Sun, Moon, Monitor, Smartphone, Wifi, WifiOff, RotateCcw } from "lucide-react";
+import { Syringe, Target, Info, Pencil, Check, X, Bell, BellOff, RefreshCw, Sun, Moon, Monitor, Smartphone, Wifi, WifiOff, RotateCcw, LogOut } from "lucide-react";
 import type { User } from "@shared/schema";
 import { useTheme } from "@/lib/theme-provider";
 import { kgToLbs, convertWeight, lbsToKg } from "@/lib/weight-utils";
@@ -870,6 +870,35 @@ export default function Settings() {
           >
             <RefreshCw size={14} className="mr-2" />
             Redo onboarding wizard
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Account */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 bg-muted rounded-lg flex items-center justify-center">
+              <LogOut size={13} className="text-muted-foreground" />
+            </div>
+            <span className="text-sm font-bold text-foreground">Account</span>
+          </div>
+          <Separator className="mb-3" />
+          <Button
+            variant="outline"
+            className="w-full h-10 text-sm"
+            onClick={async () => {
+              try {
+                await apiRequest("POST", "/api/auth/logout");
+              } finally {
+                // Full reload so nothing from this account stays in memory.
+                window.location.assign("/");
+              }
+            }}
+            data-testid="button-sign-out"
+          >
+            <LogOut size={14} className="mr-2" />
+            Sign out
           </Button>
         </CardContent>
       </Card>

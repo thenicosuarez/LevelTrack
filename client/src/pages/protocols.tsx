@@ -14,6 +14,7 @@ import LabelScanner from "@/components/label-scanner";
 import VoiceNoteProcessor from "@/components/voice-note-processor";
 import PeptideReferenceLibrary from "@/pages/peptide-reference";
 import type { Protocol, ProtocolItem } from "@shared/schema";
+import { todayLocal } from "@/lib/date-utils";
 
 const categoryIcons = {
   supplements: Shield,
@@ -61,9 +62,9 @@ export default function Protocols() {
 
   // Get today's tasks for compliance calculation
   const { data: todayTasks = [] } = useQuery<any[]>({
-    queryKey: ['/api/tasks', { date: new Date().toISOString().split('T')[0] }],
+    queryKey: ['/api/tasks', { date: todayLocal() }],
     queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayLocal();
       const response = await fetch(`/api/tasks?date=${today}`);
       return response.json();
     },

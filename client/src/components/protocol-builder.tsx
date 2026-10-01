@@ -12,6 +12,7 @@ import { Plus, Trash2, Shield, Clock, Dumbbell, Utensils, Camera } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { InsertProtocol, InsertProtocolItem, Protocol } from "@shared/schema";
+import { todayLocal } from "@/lib/date-utils";
 
 interface ProtocolBuilderProps {
   open: boolean;
@@ -89,7 +90,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [selectedHorsemen, setSelectedHorsemen] = useState<string[]>([]);
   const [windowMode, setWindowMode] = useState<"fasting" | "eating">("fasting");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(todayLocal());
   const getDefaultProtocolItem = (): ProtocolItemForm => ({
     name: "",
     dosageAmount: "",
@@ -128,7 +129,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       setSelectedGoals(editingProtocol.goals || []);
       setSelectedHorsemen((editingProtocol as any).horsemenTags || []);
       setWindowMode(((editingProtocol as any).windowMode as "fasting" | "eating") || "fasting");
-      setStartDate(editingProtocol.startDate || new Date().toISOString().split('T')[0]);
+      setStartDate(editingProtocol.startDate || todayLocal());
       
       // Load protocol items
       const loadProtocolItems = async () => {
@@ -202,7 +203,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   });
 
   const createProtocolItemMutation = useMutation({
-    mutationFn: async ({ protocolId, items }: { protocolId: number; items: ProtocolItemForm[] }) => {
+    mutationFn: async ({ protocolId, items }: { protocolId: number; items: Omit<InsertProtocolItem, "protocolId">[] }) => {
       const promises = items.map((item, index) => 
         apiRequest("POST", `/api/protocols/${protocolId}/items`, {
           ...item,
@@ -236,7 +237,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   });
 
   const updateProtocolItemMutation = useMutation({
-    mutationFn: async ({ protocolId, items }: { protocolId: number; items: ProtocolItemForm[] }) => {
+    mutationFn: async ({ protocolId, items }: { protocolId: number; items: Omit<InsertProtocolItem, "protocolId">[] }) => {
       try {
         // First, delete existing items
         const deleteResponse = await apiRequest("DELETE", `/api/protocols/${protocolId}/items`);
@@ -309,7 +310,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     }
 
     // Validate items based on category
-    let validItems;
+    let validItems: ProtocolItemForm[];
     if (selectedCategory === "fasting") {
       // For fasting, we need at least a start time
       if (!protocolItems[0]?.startTime) {
@@ -329,6 +330,14 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
         timing: protocolItems[0].startTime,
         dosageAmount: "",
         dosageUnit: "",
+        formFactor: "",
+        cyclingType: "",
+        onCycleDays: "",
+        offCycleDays: "",
+        currentCyclePhase: "",
+        cycleStartDate: "",
+        cycleEndDate: "",
+        trackingKpis: [],
         sets: "",
         reps: "",
         duration: "",
@@ -424,7 +433,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
           protocolId: editingProtocol.id,
           items: validItems.map(item => ({
             name: item.name,
-            dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+            dosageAmount: item.dosageAmount ? parseFloat(item.dosageAmount) : null,
             dosageUnit: item.dosageUnit || null,
             formFactor: item.formFactor || null,
             cyclingType: item.cyclingType || null,
@@ -468,7 +477,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
             protocolId: protocol.id,
             items: validItems.map(item => ({
               name: item.name,
-              dosageAmount: item.dosageAmount ? parseInt(item.dosageAmount) : null,
+              dosageAmount: item.dosageAmount ? parseFloat(item.dosageAmount) : null,
               dosageUnit: item.dosageUnit || null,
               formFactor: item.formFactor || null,
               cyclingType: item.cyclingType || null,
@@ -520,7 +529,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
     setProtocolItems(protocolItems.filter((_, i) => i !== index));
   };
 
-  const updateProtocolItem = (index: number, field: keyof ProtocolItemForm, value: string) => {
+  const updateProtocolItem = <K extends keyof ProtocolItemForm>(index: number, field: K, value: ProtocolItemForm[K]) => {
     const updated = [...protocolItems];
     updated[index][field] = value;
     setProtocolItems(updated);

@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Camera, Upload, X, Check, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { compressImage } from "@/lib/image";
 
 interface LabelScannerProps {
   onProtocolCreated?: () => void;
@@ -34,16 +35,10 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
 
   const scanLabelMutation = useMutation({
     mutationFn: async (imageFiles: File[]) => {
-      const formData = new FormData();
-      imageFiles.forEach((file, index) => {
-        formData.append(`image${index}`, file);
-      });
-
-      const response = await apiRequest("/api/scan-label", {
-        method: "POST",
-        body: formData,
-      });
-      return response;
+      // Labels need more detail than progress photos, so keep them larger.
+      const images = await Promise.all(imageFiles.map(file => compressImage(file, 1600, 0.85)));
+      const response = await apiRequest("POST", "/api/scan-label", { images });
+      return (await response.json()) as ScanResult;
     },
     onSuccess: (result: ScanResult) => {
       setScanResult(result);
@@ -53,9 +48,15 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
       });
     },
     onError: (error) => {
+      // apiRequest errors read "<status>: <json body>"; show the server's message.
+      let description = "Unable to process the label images. Please try again.";
+      try {
+        const body = JSON.parse(error.message.slice(error.message.indexOf(":") + 1));
+        if (typeof body.error === "string") description = body.error;
+      } catch { /* keep the generic message */ }
       toast({
         title: "Scan Failed",
-        description: "Unable to process the label images. Please try again.",
+        description,
         variant: "destructive",
       });
     },
@@ -63,41 +64,29 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
 
   const createProtocolFromScan = useMutation({
     mutationFn: async (scanData: ScanResult) => {
-      const response = await apiRequest("/api/protocols", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: scanData.supplementName,
-          description: `${scanData.brand} - Scanned from label`,
-          category: "supplements",
-          isActive: true,
-          color: "#14B8A6",
-          goals: [],
-          userId: 1,
-        }),
+      const protocolRes = await apiRequest("POST", "/api/protocols", {
+        name: scanData.supplementName,
+        description: `${scanData.brand} - Scanned from label`,
+        category: "supplements",
+        isActive: true,
+        color: "#14B8A6",
+        goals: [],
       });
+      const protocol = await protocolRes.json();
 
       // Create protocol item
-      const protocolItemResponse = await apiRequest(`/api/protocols/${response.id}/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: scanData.supplementName,
-          dosageAmount: parseInt(scanData.dosageAmount) || null,
-          dosageUnit: scanData.dosageUnit,
-          formFactor: "capsule",
-          timing: "08:00",
-          frequency: "daily",
-          instructions: `Take ${scanData.servingSize} daily`,
-          order: 0,
-        }),
+      const itemRes = await apiRequest("POST", `/api/protocols/${protocol.id}/items`, {
+        name: scanData.supplementName,
+        dosageAmount: parseFloat(scanData.dosageAmount) || null,
+        dosageUnit: scanData.dosageUnit,
+        formFactor: "capsule",
+        timing: "08:00",
+        frequency: "daily",
+        instructions: `Take ${scanData.servingSize} daily`,
+        order: 0,
       });
 
-      return { protocol: response, item: protocolItemResponse };
+      return { protocol, item: await itemRes.json() };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/protocols"] });

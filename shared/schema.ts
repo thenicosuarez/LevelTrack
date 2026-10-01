@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, json, real, unique, varchar, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,6 +8,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   avatar: text("avatar"),
+  googleId: text("google_id"), // Google account "sub" claim
   streak: integer("streak").default(0),
   totalCompliance: integer("total_compliance").default(0),
   createdAt: timestamp("created_at").defaultNow(),
@@ -27,7 +28,12 @@ export const users = pgTable("users", {
   // Profile
   heightCm: integer("height_cm"), // for BMI calculation
   theme: text("theme").default("light"), // light | dark | system
-});
+  timezone: text("timezone"), // IANA zone, e.g. "America/Los_Angeles"; reported by the browser
+}, (table) => ({
+  // A unique index rather than a constraint so `db:push` can add it to a
+  // populated table without prompting to truncate.
+  googleIdIdx: uniqueIndex("users_google_id_idx").on(table.googleId),
+}));
 
 export const protocols = pgTable("protocols", {
   id: serial("id").primaryKey(),
@@ -50,7 +56,7 @@ export const protocolItems = pgTable("protocol_items", {
   name: text("name").notNull(),
   
   // Enhanced supplement/nutrition fields
-  dosageAmount: integer("dosage_amount"), // numerical value like 500, 1000, 2
+  dosageAmount: real("dosage_amount"), // numerical value like 500, 1000, 2.5
   dosageUnit: text("dosage_unit"), // mg, g, oz, ml, pills, drops, etc.
   formFactor: text("form_factor"), // capsule, powder, injectable, sublingual, dropper, tablet, liquid, etc.
   
@@ -143,6 +149,17 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   auth: text("auth").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// ─── Login sessions ───────────────────────────────────────────────────────
+// Managed by connect-pg-simple; declared here so `db:push` keeps it.
+
+export const sessions = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+}, (table) => ({
+  expireIdx: index("IDX_session_expire").on(table.expire),
+}));
 
 // ─── LevelTrack GLP-1 Tables ───────────────────────────────────────────────
 
@@ -260,22 +277,42 @@ export const insertVoiceNoteSchema = createInsertSchema(voiceNotes).omit({
   processedAt: true,
 });
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+const symptomScore = z.number().int().min(1).max(5).nullable().optional();
+
 export const insertGlp1LogSchema = createInsertSchema(glp1Logs).omit({
   id: true,
   createdAt: true,
+}).extend({
+  date: isoDate,
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Expected HH:MM"),
+  doseAmount: z.number().positive(),
+  painScore: z.number().int().min(0).max(10).nullable().optional(),
 });
 
 export const insertSideEffectLogSchema = createInsertSchema(sideEffectLogs).omit({
   id: true,
   createdAt: true,
+}).extend({
+  date: isoDate,
+  nausea: symptomScore,
+  gi: symptomScore,
+  fatigue: symptomScore,
+  mood: symptomScore,
+  cravings: symptomScore,
+  sleep: symptomScore,
+  energy: symptomScore,
 });
+
+export const updateSideEffectLogSchema = insertSideEffectLogSchema.omit({ userId: true }).partial();
 
 export const insertProgressPhotoSchema = createInsertSchema(progressPhotos).omit({
   id: true,
   createdAt: true,
 }).extend({
+  date: isoDate,
   photoUrl: z.string().optional(),
-  weight: z.number().optional(),
+  weight: z.number().positive().optional(),
   notes: z.string().optional(),
 });
 

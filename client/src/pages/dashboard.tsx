@@ -130,7 +130,7 @@ function MedLevelsChart({ logs, drug }: { logs: Glp1Log[]; drug: string | null |
     for (let i = days; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const dayStr = d.toISOString().split("T")[0];
+      const dayStr = formatDate(d);
       let level = 0;
       for (const log of logs) {
         const logDate = new Date(log.date);

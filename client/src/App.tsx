@@ -1,6 +1,8 @@
 import { Switch, Route, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { queryClient, getQueryFn, apiRequest } from "./lib/queryClient";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { browserTimeZone } from "@/lib/date-utils";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -14,6 +16,31 @@ import Protocols from "@/pages/protocols";
 import PeptideCalculator from "@/pages/peptide-calculator";
 import Header from "@/components/header";
 import BottomNav from "@/components/bottom-nav";
+import SignIn from "@/pages/sign-in";
+import type { User } from "@shared/schema";
+
+function AuthGate() {
+  const { data: user, isLoading } = useQuery<User | null>({
+    queryKey: ["/api/user"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
+  // Keep the stored time zone current so reminders fire on the user's clock.
+  useEffect(() => {
+    const tz = browserTimeZone();
+    if (user && tz && user.timezone !== tz) {
+      apiRequest("PATCH", "/api/user/settings", { timezone: tz })
+        .then(res => res.json())
+        .then(updated => queryClient.setQueryData(["/api/user"], updated))
+        .catch(() => { /* non-critical; retried on next load */ });
+    }
+  }, [user?.id, user?.timezone]);
+
+  if (isLoading) {
+    return <div className="mobile-container min-h-screen" aria-busy="true" />;
+  }
+  return user ? <Router /> : <SignIn />;
+}
 
 function Router() {
   return (
@@ -50,7 +77,7 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <AuthGate />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

@@ -1,12 +1,12 @@
-import OpenAI from "openai";
+import { getOpenAI } from "./openai";
 import { storage } from "./storage";
 import fs from "fs";
 import path from "path";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-export async function processVoiceNoteAsync(voiceNoteId: number, audioData: string) {
+export async function processVoiceNoteAsync(voiceNoteId: number, userId: number, audioData: string) {
   try {
+    const openai = getOpenAI();
+
     // Update status to processing
     await storage.updateVoiceNote(voiceNoteId, { processingStatus: "processing" });
 
@@ -102,7 +102,7 @@ export async function processVoiceNoteAsync(voiceNoteId: number, audioData: stri
             name: protocolData.name,
             description: protocolData.description,
             category: protocolData.category,
-            userId: 1, // Demo user
+            userId,
             isActive: true,
             color: "#14B8A6",
             goals: [],

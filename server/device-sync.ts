@@ -168,6 +168,7 @@ async function getOuraToken(integration: Integration): Promise<string | null> {
 export async function syncOuraSleep(userId: number): Promise<{ synced: number; error?: string }> {
   const integration = await storage.getIntegrationByPlatform(userId, "oura");
   if (!integration || !integration.isActive) return { synced: 0, error: "Not connected" };
+  const connected = integration; // narrowed copy for the closure below
 
   let token = await getOuraToken(integration);
   if (!token) return { synced: 0, error: "Token refresh failed" };
@@ -180,7 +181,7 @@ export async function syncOuraSleep(userId: number): Promise<{ synced: number; e
   async function fetchOura(path: string, tok: string): Promise<Response> {
     let r = await fetch(`${OURA_API}/${path}?start_date=${startDate}&end_date=${endDate}`, { headers: makeHeaders(tok) });
     if (r.status === 401) {
-      const refreshed = await refreshOuraToken(integration);
+      const refreshed = await refreshOuraToken(connected);
       if (refreshed) {
         tok = refreshed;
         r = await fetch(`${OURA_API}/${path}?start_date=${startDate}&end_date=${endDate}`, { headers: makeHeaders(tok) });

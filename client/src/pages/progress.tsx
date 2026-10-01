@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import type { ProgressPhoto, Glp1Log, User } from "@shared/schema";
 import html2canvas from "html2canvas";
 import { formatWeight, convertWeight, kgToLbs } from "@/lib/weight-utils";
+import { todayLocal } from "@/lib/date-utils";
+import { compressImage } from "@/lib/image";
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T12:00:00");
@@ -26,25 +28,6 @@ function daysBetween(a: string, b: string) {
   const da = new Date(a + "T12:00:00");
   const db = new Date(b + "T12:00:00");
   return Math.round(Math.abs(db.getTime() - da.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function compressImage(file: File, maxPx = 900, quality = 0.78): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
 }
 
 function ShareCard({
@@ -177,7 +160,7 @@ export default function Progress() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocal();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<ProgressPhoto | null>(null);

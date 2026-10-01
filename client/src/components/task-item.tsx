@@ -28,7 +28,7 @@ export default function TaskItem({ task, protocolItem, onToggle, isFutureDate = 
     }`}>
       <div className="flex items-center space-x-3">
         <Checkbox
-          checked={task.completed}
+          checked={!!task.completed}
           onCheckedChange={handleToggle}
           disabled={isToggling || isFutureDate}
           className={`w-6 h-6 ${isFutureDate ? 'opacity-50' : ''}`}
