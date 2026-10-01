@@ -1,9 +1,9 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { drizzle as drizzleNeon } from 'drizzle-orm/neon-serverless';
+import pg from "pg";
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import ws from "ws";
 import * as schema from "@shared/schema";
-
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -11,27 +11,42 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ 
+// Neon's serverless driver talks to Neon over websockets; a plain Postgres
+// (local dev, CI) needs the standard `pg` driver. DB_DRIVER overrides the guess.
+const useNeon = process.env.DB_DRIVER
+  ? process.env.DB_DRIVER === "neon"
+  : /neon\.tech/.test(process.env.DATABASE_URL);
+
+const poolConfig = {
   connectionString: process.env.DATABASE_URL,
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-});
+};
+
+let pool: pg.Pool;
+let db: ReturnType<typeof drizzlePg<typeof schema>>;
+
+if (useNeon) {
+  neonConfig.webSocketConstructor = ws;
+  const neonPool = new NeonPool(poolConfig);
+  pool = neonPool as unknown as pg.Pool;
+  db = drizzleNeon({ client: neonPool, schema }) as unknown as typeof db;
+} else {
+  pool = new pg.Pool(poolConfig);
+  db = drizzlePg(pool, { schema });
+}
 
 // Add error handling for pool
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
 });
 
-pool.on('connect', () => {
-  console.log('Database connected successfully');
-});
-
 // Test connection on startup
 pool.query('SELECT 1').then(() => {
-  console.log('Database connection test successful');
+  console.log(`Database connection test successful (${useNeon ? "neon" : "pg"} driver)`);
 }).catch((err) => {
   console.error('Database connection test failed:', err);
 });
 
-export const db = drizzle({ client: pool, schema });
+export { pool, db };

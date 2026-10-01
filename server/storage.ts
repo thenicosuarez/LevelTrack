@@ -15,25 +15,31 @@ import {
   type OuraDailyLog, type InsertOuraDailyLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { randomBytes } from "crypto";
+
+const DEMO_EMAIL = "alex@example.com";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | undefined>;
+  getUsersWithRemindersEnabled(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
 
   // Protocols
   getProtocols(userId: number): Promise<Protocol[]>;
-  getProtocol(id: number): Promise<Protocol | undefined>;
+  getProtocol(id: number, userId: number): Promise<Protocol | undefined>;
   createProtocol(protocol: InsertProtocol): Promise<Protocol>;
-  updateProtocol(id: number, protocol: Partial<Protocol>): Promise<Protocol>;
-  deleteProtocol(id: number): Promise<void>;
+  updateProtocol(id: number, userId: number, protocol: Partial<Protocol>): Promise<Protocol | undefined>;
+  deleteProtocol(id: number, userId: number): Promise<boolean>;
 
   // Protocol Items
   getProtocolItems(protocolId: number): Promise<ProtocolItem[]>;
   createProtocolItem(item: InsertProtocolItem): Promise<ProtocolItem>;
+  getProtocolItemOwner(id: number): Promise<number | undefined>;
   updateProtocolItem(id: number, item: Partial<ProtocolItem>): Promise<ProtocolItem>;
   deleteProtocolItem(id: number): Promise<void>;
   deleteProtocolItems(protocolId: number): Promise<void>;
@@ -42,7 +48,7 @@ export interface IStorage {
   getTasks(userId: number, date?: string): Promise<Task[]>;
   getTask(id: number): Promise<Task | undefined>;
   createTask(task: InsertTask): Promise<Task>;
-  updateTask(id: number, task: Partial<Task>): Promise<Task>;
+  updateTask(id: number, userId: number, task: Partial<Task>): Promise<Task | undefined>;
   getTasksForDateRange(userId: number, startDate: string, endDate: string): Promise<Task[]>;
 
   // Health Metrics
@@ -55,6 +61,7 @@ export interface IStorage {
   getIntegrationByPlatform(userId: number, platform: string): Promise<Integration | undefined>;
   createIntegration(integration: InsertIntegration): Promise<Integration>;
   updateIntegration(id: number, integration: Partial<Integration>): Promise<Integration>;
+  updateUserIntegration(id: number, userId: number, integration: Partial<Integration>): Promise<Integration | undefined>;
   upsertIntegrationByPlatform(userId: number, platform: string, data: Partial<Integration>): Promise<Integration>;
   deleteIntegrationByPlatform(userId: number, platform: string): Promise<void>;
 
@@ -62,35 +69,35 @@ export interface IStorage {
   getVoiceNotes(userId: number): Promise<VoiceNote[]>;
   createVoiceNote(voiceNote: InsertVoiceNote): Promise<VoiceNote>;
   updateVoiceNote(id: number, voiceNote: Partial<VoiceNote>): Promise<VoiceNote>;
-  getVoiceNote(id: number): Promise<VoiceNote | undefined>;
+  getVoiceNote(id: number, userId: number): Promise<VoiceNote | undefined>;
 
   // GLP-1 Logs
   getGlp1Logs(userId: number): Promise<Glp1Log[]>;
-  getGlp1Log(id: number): Promise<Glp1Log | undefined>;
+  getGlp1Log(id: number, userId: number): Promise<Glp1Log | undefined>;
   createGlp1Log(log: InsertGlp1Log): Promise<Glp1Log>;
-  deleteGlp1Log(id: number): Promise<void>;
+  deleteGlp1Log(id: number, userId: number): Promise<boolean>;
   getGlp1LogsForDateRange(userId: number, startDate: string, endDate: string): Promise<Glp1Log[]>;
   getTodayGlp1Log(userId: number, date: string): Promise<Glp1Log | undefined>;
 
   // Side Effect Logs
   getSideEffectLogs(userId: number): Promise<SideEffectLog[]>;
-  getSideEffectLog(id: number): Promise<SideEffectLog | undefined>;
+  getSideEffectLog(id: number, userId: number): Promise<SideEffectLog | undefined>;
   getTodaySideEffectLog(userId: number, date: string): Promise<SideEffectLog | undefined>;
   createSideEffectLog(log: InsertSideEffectLog): Promise<SideEffectLog>;
-  updateSideEffectLog(id: number, log: Partial<SideEffectLog>): Promise<SideEffectLog>;
+  updateSideEffectLog(id: number, userId: number, log: Partial<SideEffectLog>): Promise<SideEffectLog | undefined>;
   getSideEffectLogsForDateRange(userId: number, startDate: string, endDate: string): Promise<SideEffectLog[]>;
 
   // Progress Photos
   getProgressPhotos(userId: number): Promise<ProgressPhoto[]>;
-  getProgressPhoto(id: number): Promise<ProgressPhoto | undefined>;
+  getProgressPhoto(id: number, userId: number): Promise<ProgressPhoto | undefined>;
   createProgressPhoto(photo: InsertProgressPhoto): Promise<ProgressPhoto>;
-  deleteProgressPhoto(id: number): Promise<void>;
+  deleteProgressPhoto(id: number, userId: number): Promise<boolean>;
   upsertWithingsWeightEntry(userId: number, date: string, weightLbs: number): Promise<void>;
 
   // Push Subscriptions
   getPushSubscriptions(userId: number): Promise<PushSubscription[]>;
   upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
-  deletePushSubscription(endpoint: string): Promise<void>;
+  deletePushSubscription(endpoint: string, userId: number): Promise<void>;
   getAllPushSubscriptions(): Promise<PushSubscription[]>;
 
   // Peptide Calculations
@@ -111,27 +118,34 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  constructor() {
-    this.initializeDefaultUser();
+  // The demo/legacy user was inserted with an explicit id, which leaves the
+  // users.id sequence behind; realign it so new sign-ups don't collide.
+  async syncUserIdSequence(): Promise<void> {
+    await db.execute(sql`SELECT setval(pg_get_serial_sequence('users', 'id'), GREATEST((SELECT MAX(id) FROM users), 1))`);
   }
 
-  private async initializeDefaultUser() {
-    try {
-      const existingUser = await this.getUser(1);
-      if (!existingUser) {
-        await db.insert(users).values({
-          id: 1,
-          username: "alex",
-          email: "alex@example.com",
-          name: "Alex",
-          avatar: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100",
-          streak: 7,
-          totalCompliance: 92,
-        });
-      }
-    } catch (error) {
-      console.log("Default user initialization handled");
+  // Returns the demo account (alex@example.com), creating it if needed. On a
+  // fresh database it becomes user #1, matching the pre-auth single-user data.
+  // An account linked to Google is never used as the demo account, so the demo
+  // button can't open a real user's data.
+  async ensureDemoUser(): Promise<User> {
+    const existing = await this.getUserByEmail(DEMO_EMAIL);
+    if (existing) {
+      if (existing.googleId) throw new Error("Demo account email is linked to a Google account");
+      return existing;
     }
+    const userOneTaken = !!(await this.getUser(1));
+    const [user] = await db.insert(users).values({
+      ...(userOneTaken ? {} : { id: 1 }),
+      username: userOneTaken ? `demo-${randomBytes(3).toString("hex")}` : "alex",
+      email: DEMO_EMAIL,
+      name: "Alex",
+      avatar: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100",
+      streak: 7,
+      totalCompliance: 92,
+    }).returning();
+    await this.syncUserIdSequence();
+    return user;
   }
 
   // Users
@@ -143,6 +157,15 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+    return user || undefined;
+  }
+
+  async getUsersWithRemindersEnabled(): Promise<User[]> {
+    return db.select().from(users).where(eq(users.reminderEnabled, true));
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -161,8 +184,9 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(protocols).where(eq(protocols.userId, userId));
   }
 
-  async getProtocol(id: number): Promise<Protocol | undefined> {
-    const [protocol] = await db.select().from(protocols).where(eq(protocols.id, id));
+  async getProtocol(id: number, userId: number): Promise<Protocol | undefined> {
+    const [protocol] = await db.select().from(protocols)
+      .where(and(eq(protocols.id, id), eq(protocols.userId, userId)));
     return protocol || undefined;
   }
 
@@ -171,14 +195,16 @@ export class DatabaseStorage implements IStorage {
     return protocol;
   }
 
-  async updateProtocol(id: number, updates: Partial<Protocol>): Promise<Protocol> {
-    const [protocol] = await db.update(protocols).set(updates).where(eq(protocols.id, id)).returning();
-    if (!protocol) throw new Error("Protocol not found");
-    return protocol;
+  async updateProtocol(id: number, userId: number, updates: Partial<Protocol>): Promise<Protocol | undefined> {
+    const [protocol] = await db.update(protocols).set(updates)
+      .where(and(eq(protocols.id, id), eq(protocols.userId, userId))).returning();
+    return protocol || undefined;
   }
 
-  async deleteProtocol(id: number): Promise<void> {
-    await db.delete(protocols).where(eq(protocols.id, id));
+  async deleteProtocol(id: number, userId: number): Promise<boolean> {
+    const deleted = await db.delete(protocols)
+      .where(and(eq(protocols.id, id), eq(protocols.userId, userId))).returning();
+    return deleted.length > 0;
   }
 
   // Protocol Items
@@ -189,6 +215,14 @@ export class DatabaseStorage implements IStorage {
   async createProtocolItem(insertItem: InsertProtocolItem): Promise<ProtocolItem> {
     const [item] = await db.insert(protocolItems).values(insertItem).returning();
     return item;
+  }
+
+  async getProtocolItemOwner(id: number): Promise<number | undefined> {
+    const [row] = await db.select({ userId: protocols.userId })
+      .from(protocolItems)
+      .innerJoin(protocols, eq(protocolItems.protocolId, protocols.id))
+      .where(eq(protocolItems.id, id));
+    return row?.userId;
   }
 
   async updateProtocolItem(id: number, updates: Partial<ProtocolItem>): Promise<ProtocolItem> {
@@ -234,13 +268,13 @@ export class DatabaseStorage implements IStorage {
     return task;
   }
 
-  async updateTask(id: number, updates: Partial<Task>): Promise<Task> {
+  async updateTask(id: number, userId: number, updates: Partial<Task>): Promise<Task | undefined> {
     if (updates.completed === true) {
       updates.completedAt = new Date();
     }
-    const [task] = await db.update(tasks).set(updates).where(eq(tasks.id, id)).returning();
-    if (!task) throw new Error("Task not found");
-    return task;
+    const [task] = await db.update(tasks).set(updates)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId))).returning();
+    return task || undefined;
   }
 
   async getTasksForDateRange(userId: number, startDate: string, endDate: string): Promise<Task[]> {
@@ -292,6 +326,12 @@ export class DatabaseStorage implements IStorage {
     return integration;
   }
 
+  async updateUserIntegration(id: number, userId: number, updates: Partial<Integration>): Promise<Integration | undefined> {
+    const [integration] = await db.update(integrations).set(updates)
+      .where(and(eq(integrations.id, id), eq(integrations.userId, userId))).returning();
+    return integration || undefined;
+  }
+
   async upsertIntegrationByPlatform(userId: number, platform: string, data: Partial<Integration>): Promise<Integration> {
     const existing = await this.getIntegrationByPlatform(userId, platform);
     if (existing) {
@@ -323,8 +363,9 @@ export class DatabaseStorage implements IStorage {
     return voiceNote;
   }
 
-  async getVoiceNote(id: number): Promise<VoiceNote | undefined> {
-    const [voiceNote] = await db.select().from(voiceNotes).where(eq(voiceNotes.id, id));
+  async getVoiceNote(id: number, userId: number): Promise<VoiceNote | undefined> {
+    const [voiceNote] = await db.select().from(voiceNotes)
+      .where(and(eq(voiceNotes.id, id), eq(voiceNotes.userId, userId)));
     return voiceNote || undefined;
   }
 
@@ -335,8 +376,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(glp1Logs.date), desc(glp1Logs.time));
   }
 
-  async getGlp1Log(id: number): Promise<Glp1Log | undefined> {
-    const [log] = await db.select().from(glp1Logs).where(eq(glp1Logs.id, id));
+  async getGlp1Log(id: number, userId: number): Promise<Glp1Log | undefined> {
+    const [log] = await db.select().from(glp1Logs)
+      .where(and(eq(glp1Logs.id, id), eq(glp1Logs.userId, userId)));
     return log || undefined;
   }
 
@@ -345,8 +387,10 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
-  async deleteGlp1Log(id: number): Promise<void> {
-    await db.delete(glp1Logs).where(eq(glp1Logs.id, id));
+  async deleteGlp1Log(id: number, userId: number): Promise<boolean> {
+    const deleted = await db.delete(glp1Logs)
+      .where(and(eq(glp1Logs.id, id), eq(glp1Logs.userId, userId))).returning();
+    return deleted.length > 0;
   }
 
   async getGlp1LogsForDateRange(userId: number, startDate: string, endDate: string): Promise<Glp1Log[]> {
@@ -369,8 +413,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(sideEffectLogs.date));
   }
 
-  async getSideEffectLog(id: number): Promise<SideEffectLog | undefined> {
-    const [log] = await db.select().from(sideEffectLogs).where(eq(sideEffectLogs.id, id));
+  async getSideEffectLog(id: number, userId: number): Promise<SideEffectLog | undefined> {
+    const [log] = await db.select().from(sideEffectLogs)
+      .where(and(eq(sideEffectLogs.id, id), eq(sideEffectLogs.userId, userId)));
     return log || undefined;
   }
 
@@ -386,10 +431,10 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
-  async updateSideEffectLog(id: number, updates: Partial<SideEffectLog>): Promise<SideEffectLog> {
-    const [log] = await db.update(sideEffectLogs).set(updates).where(eq(sideEffectLogs.id, id)).returning();
-    if (!log) throw new Error("Side effect log not found");
-    return log;
+  async updateSideEffectLog(id: number, userId: number, updates: Partial<SideEffectLog>): Promise<SideEffectLog | undefined> {
+    const [log] = await db.update(sideEffectLogs).set(updates)
+      .where(and(eq(sideEffectLogs.id, id), eq(sideEffectLogs.userId, userId))).returning();
+    return log || undefined;
   }
 
   async getSideEffectLogsForDateRange(userId: number, startDate: string, endDate: string): Promise<SideEffectLog[]> {
@@ -405,8 +450,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(progressPhotos.date));
   }
 
-  async getProgressPhoto(id: number): Promise<ProgressPhoto | undefined> {
-    const [photo] = await db.select().from(progressPhotos).where(eq(progressPhotos.id, id));
+  async getProgressPhoto(id: number, userId: number): Promise<ProgressPhoto | undefined> {
+    const [photo] = await db.select().from(progressPhotos)
+      .where(and(eq(progressPhotos.id, id), eq(progressPhotos.userId, userId)));
     return photo || undefined;
   }
 
@@ -415,8 +461,10 @@ export class DatabaseStorage implements IStorage {
     return photo;
   }
 
-  async deleteProgressPhoto(id: number): Promise<void> {
-    await db.delete(progressPhotos).where(eq(progressPhotos.id, id));
+  async deleteProgressPhoto(id: number, userId: number): Promise<boolean> {
+    const deleted = await db.delete(progressPhotos)
+      .where(and(eq(progressPhotos.id, id), eq(progressPhotos.userId, userId))).returning();
+    return deleted.length > 0;
   }
 
   async upsertWithingsWeightEntry(userId: number, date: string, weightLbs: number): Promise<void> {
@@ -442,7 +490,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(pushSubscriptions.endpoint, sub.endpoint));
     if (existing.length > 0) {
       const [updated] = await db.update(pushSubscriptions)
-        .set({ p256dh: sub.p256dh, auth: sub.auth })
+        .set({ userId: sub.userId, p256dh: sub.p256dh, auth: sub.auth })
         .where(eq(pushSubscriptions.endpoint, sub.endpoint))
         .returning();
       return updated;
@@ -451,8 +499,9 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async deletePushSubscription(endpoint: string): Promise<void> {
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  async deletePushSubscription(endpoint: string, userId: number): Promise<void> {
+    await db.delete(pushSubscriptions)
+      .where(and(eq(pushSubscriptions.endpoint, endpoint), eq(pushSubscriptions.userId, userId)));
   }
 
   async getAllPushSubscriptions(): Promise<PushSubscription[]> {

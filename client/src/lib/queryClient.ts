@@ -1,4 +1,4 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryCache, MutationCache, QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -41,7 +41,17 @@ export const getQueryFn: <T>(options: {
     return await res.json();
   };
 
-export const queryClient = new QueryClient({
+// A 401 anywhere means the session ended; clearing the user sends the app
+// back to the sign-in screen.
+function handleUnauthorized(error: unknown) {
+  if (error instanceof Error && error.message.startsWith("401")) {
+    queryClient.setQueryData(["/api/user"], null);
+  }
+}
+
+export const queryClient: QueryClient = new QueryClient({
+  queryCache: new QueryCache({ onError: handleUnauthorized }),
+  mutationCache: new MutationCache({ onError: handleUnauthorized }),
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),

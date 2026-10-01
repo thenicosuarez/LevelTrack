@@ -14,6 +14,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### October 2026 - Google Sign-In, Per-User Data & Bug Fixes
+- **Google sign-in** (`server/auth.ts`, `client/src/pages/sign-in.tsx`): OAuth 2.0 / OpenID Connect code flow, no extra packages. Sessions are stored in Postgres (`session` table, 30-day cookie). Every `/api` route now requires sign-in except `/api/auth/*`, `/api/drugs` and `/api/push/vapid-public-key`.
+  - `GET /api/auth/config`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `POST /api/auth/demo`, `POST /api/auth/logout`
+  - Settings page has a **Sign out** button
+- **Per-user data**: the hard-coded `userId = 1` is gone. Every route uses the signed-in user, and every read/update/delete by id checks ownership (another user's records return 404). The reminder scheduler now covers all users.
+- **Demo account**: "Try the demo account" button on by default in development, off in production (override with `DEMO_MODE=true|false`). It never opens an account linked to Google.
+- **Bug fixes**: shot adherence now measured against the injection schedule (`server/adherence.ts`; a weekly injector who never misses = 100%, was ~13%); negative/zero doses, out-of-range pain (0–10) and journal (1–5) scores and malformed dates rejected; `/api/protocols/compliance` no longer swallowed by `/api/protocols/:id`; supplement doses accept decimals (2.5 g); server no longer crashes at startup without `OPENAI_API_KEY`; `PATCH` routes only accept their own fields (no editing streak/email/owner); `/api/debug/db-test` removed; deleting a missing record returns 404; voice notes and label scanner were calling the API with the wrong arguments; 0 TypeScript errors (was 47).
+- **Local dev**: `server/db.ts` uses Neon's driver for `*.neon.tech` URLs and plain `pg` otherwise (override with `DB_DRIVER=neon|pg`). `npm test` runs unit tests.
+
 ### March 2026 - Device Integrations: Withings Scale + Oura Ring (Task #6)
 - **Full OAuth 2.0 flow** for both Withings and Oura Ring:
   - `GET /api/integrations/withings/auth` — initiates OAuth, redirects to Withings consent
@@ -163,7 +172,14 @@ Preferred communication style: Simple, everyday language.
 - Capacitor can be added to wrap this as a native iOS/Android app
 
 ## Configuration
-- **Environment Variables**: DATABASE_URL for database connection
+- **Environment Variables**:
+  - `DATABASE_URL` — database connection
+  - `SESSION_SECRET` — **required in production**; any long random string, used to sign login cookies
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google sign-in (Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type "Web application"). Authorized redirect URI: `<APP_BASE_URL>/api/auth/google/callback`
+  - `APP_BASE_URL` — public URL of the app (e.g. `https://leveltrack.example.com`), used for OAuth redirect URIs
+  - `LEGACY_USER_EMAIL` — optional; the first Google sign-in with this email takes over the data that existed before sign-in was added (user #1)
+  - `DEMO_MODE` — optional; `true`/`false` to force the demo button on/off
+  - `OPENAI_API_KEY` — optional; only needed for voice notes
 - **Build Commands**: npm run build for production, npm run dev for development
 - **Database Migrations**: npm run db:push for schema updates
 
@@ -186,4 +202,4 @@ Preferred communication style: Simple, everyday language.
 - AI coach layer for pattern detection
 - Push notification reminders
 - Clinician/coach shared dashboards
-- Real authentication (currently demo mode with userId=1)
+- Email/password or Apple sign-in alongside Google

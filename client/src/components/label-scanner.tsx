@@ -39,11 +39,14 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
         formData.append(`image${index}`, file);
       });
 
-      const response = await apiRequest("/api/scan-label", {
+      // FormData upload, so call fetch directly rather than the JSON apiRequest helper.
+      const response = await fetch("/api/scan-label", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
-      return response;
+      if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+      return (await response.json()) as ScanResult;
     },
     onSuccess: (result: ScanResult) => {
       setScanResult(result);
@@ -63,41 +66,29 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
 
   const createProtocolFromScan = useMutation({
     mutationFn: async (scanData: ScanResult) => {
-      const response = await apiRequest("/api/protocols", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: scanData.supplementName,
-          description: `${scanData.brand} - Scanned from label`,
-          category: "supplements",
-          isActive: true,
-          color: "#14B8A6",
-          goals: [],
-          userId: 1,
-        }),
+      const protocolRes = await apiRequest("POST", "/api/protocols", {
+        name: scanData.supplementName,
+        description: `${scanData.brand} - Scanned from label`,
+        category: "supplements",
+        isActive: true,
+        color: "#14B8A6",
+        goals: [],
       });
+      const protocol = await protocolRes.json();
 
       // Create protocol item
-      const protocolItemResponse = await apiRequest(`/api/protocols/${response.id}/items`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: scanData.supplementName,
-          dosageAmount: parseInt(scanData.dosageAmount) || null,
-          dosageUnit: scanData.dosageUnit,
-          formFactor: "capsule",
-          timing: "08:00",
-          frequency: "daily",
-          instructions: `Take ${scanData.servingSize} daily`,
-          order: 0,
-        }),
+      const itemRes = await apiRequest("POST", `/api/protocols/${protocol.id}/items`, {
+        name: scanData.supplementName,
+        dosageAmount: parseFloat(scanData.dosageAmount) || null,
+        dosageUnit: scanData.dosageUnit,
+        formFactor: "capsule",
+        timing: "08:00",
+        frequency: "daily",
+        instructions: `Take ${scanData.servingSize} daily`,
+        order: 0,
       });
 
-      return { protocol: response, item: protocolItemResponse };
+      return { protocol, item: await itemRes.json() };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/protocols"] });
