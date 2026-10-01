@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Camera, Upload, X, Check, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { compressImage } from "@/lib/image";
 
 interface LabelScannerProps {
   onProtocolCreated?: () => void;
@@ -34,18 +35,9 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
 
   const scanLabelMutation = useMutation({
     mutationFn: async (imageFiles: File[]) => {
-      const formData = new FormData();
-      imageFiles.forEach((file, index) => {
-        formData.append(`image${index}`, file);
-      });
-
-      // FormData upload, so call fetch directly rather than the JSON apiRequest helper.
-      const response = await fetch("/api/scan-label", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+      // Labels need more detail than progress photos, so keep them larger.
+      const images = await Promise.all(imageFiles.map(file => compressImage(file, 1600, 0.85)));
+      const response = await apiRequest("POST", "/api/scan-label", { images });
       return (await response.json()) as ScanResult;
     },
     onSuccess: (result: ScanResult) => {
@@ -56,9 +48,15 @@ export default function LabelScanner({ onProtocolCreated }: LabelScannerProps) {
       });
     },
     onError: (error) => {
+      // apiRequest errors read "<status>: <json body>"; show the server's message.
+      let description = "Unable to process the label images. Please try again.";
+      try {
+        const body = JSON.parse(error.message.slice(error.message.indexOf(":") + 1));
+        if (typeof body.error === "string") description = body.error;
+      } catch { /* keep the generic message */ }
       toast({
         title: "Scan Failed",
-        description: "Unable to process the label images. Please try again.",
+        description,
         variant: "destructive",
       });
     },

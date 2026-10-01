@@ -12,6 +12,7 @@ import { Plus, Trash2, Shield, Clock, Dumbbell, Utensils, Camera } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { InsertProtocol, InsertProtocolItem, Protocol } from "@shared/schema";
+import { todayLocal } from "@/lib/date-utils";
 
 interface ProtocolBuilderProps {
   open: boolean;
@@ -89,7 +90,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [selectedHorsemen, setSelectedHorsemen] = useState<string[]>([]);
   const [windowMode, setWindowMode] = useState<"fasting" | "eating">("fasting");
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(todayLocal());
   const getDefaultProtocolItem = (): ProtocolItemForm => ({
     name: "",
     dosageAmount: "",
@@ -128,7 +129,7 @@ export default function ProtocolBuilder({ open, onClose, editingProtocol }: Prot
       setSelectedGoals(editingProtocol.goals || []);
       setSelectedHorsemen((editingProtocol as any).horsemenTags || []);
       setWindowMode(((editingProtocol as any).windowMode as "fasting" | "eating") || "fasting");
-      setStartDate(editingProtocol.startDate || new Date().toISOString().split('T')[0]);
+      setStartDate(editingProtocol.startDate || todayLocal());
       
       // Load protocol items
       const loadProtocolItems = async () => {

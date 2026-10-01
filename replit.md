@@ -14,6 +14,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### October 2026 - Time Zones, Real Label Scanning, Upload Fix
+- **Time zones**: "today" now follows the user's own calendar. The browser sends its IANA zone in an `X-Timezone` header and saves it to `users.timezone`; the server computes dates with `server/dates.ts`. Before, a US evening shot was logged under tomorrow's date.
+- **Shot reminders** fire at the user's local reminder time on their injection day (they previously fired on the server's UTC clock, e.g. 2 am in California).
+- **Label scanning is real**: `POST /api/scan-label` takes 1–3 compressed label photos and reads them with OpenAI's vision model (`server/label-scan.ts`). Needs `OPENAI_API_KEY`; returns 503 without it, 422 if the photo isn't a readable label. Suggestions only restate label directions, never dosing advice.
+- **Photo uploads**: the JSON body limit was Express's default 100 KB, which rejected most progress photos. Now 12 MB.
+- **Logs** no longer include API response bodies (they contained health data).
+
 ### October 2026 - Google Sign-In, Per-User Data & Bug Fixes
 - **Google sign-in** (`server/auth.ts`, `client/src/pages/sign-in.tsx`): OAuth 2.0 / OpenID Connect code flow, no extra packages. Sessions are stored in Postgres (`session` table, 30-day cookie). Every `/api` route now requires sign-in except `/api/auth/*`, `/api/drugs` and `/api/push/vapid-public-key`.
   - `GET /api/auth/config`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `POST /api/auth/demo`, `POST /api/auth/logout`
@@ -166,7 +173,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Testing
 - `npm run check` — TypeScript type check (also runs as the first step of `npm run build`, so type errors block a deploy)
-- `npm test` — unit tests, no database needed: shot adherence (`server/adherence.ts`), peptide dosing math (`client/src/lib/peptide-math.ts`), Google token checks (`server/google-token.ts`)
+- `npm test` — unit tests, no database needed: shot adherence (`server/adherence.ts`), peptide dosing math (`client/src/lib/peptide-math.ts`), Google token checks (`server/google-token.ts`), time zones and reminder timing (`server/dates.ts`)
 - `npm run test:integration` — API tests against a real Postgres: sign-in, validation, and that users can't reach each other's data. Needs `TEST_DATABASE_URL` pointing at a **throwaway** database; it is wiped on every run, and the tests refuse to run if it matches `DATABASE_URL`
 - **CI**: `.github/workflows/ci.yml` runs all of the above plus the production build on every pull request and every push to `main`
 
@@ -185,7 +192,7 @@ Preferred communication style: Simple, everyday language.
   - `APP_BASE_URL` — public URL of the app (e.g. `https://leveltrack.example.com`), used for OAuth redirect URIs
   - `LEGACY_USER_EMAIL` — optional; the first Google sign-in with this email takes over the data that existed before sign-in was added (user #1)
   - `DEMO_MODE` — optional; `true`/`false` to force the demo button on/off
-  - `OPENAI_API_KEY` — optional; only needed for voice notes
+  - `OPENAI_API_KEY` — optional; needed for voice notes and label scanning
 - **Build Commands**: npm run build for production, npm run dev for development
 - **Database Migrations**: npm run db:push for schema updates
 

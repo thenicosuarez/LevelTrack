@@ -28,6 +28,7 @@ export const users = pgTable("users", {
   // Profile
   heightCm: integer("height_cm"), // for BMI calculation
   theme: text("theme").default("light"), // light | dark | system
+  timezone: text("timezone"), // IANA zone, e.g. "America/Los_Angeles"; reported by the browser
 }, (table) => ({
   // A unique index rather than a constraint so `db:push` can add it to a
   // populated table without prompting to truncate.

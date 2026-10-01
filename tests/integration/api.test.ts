@@ -24,6 +24,7 @@ process.env.GOOGLE_CLIENT_ID = "test-client";
 process.env.GOOGLE_CLIENT_SECRET = "test-secret";
 process.env.LEGACY_USER_EMAIL = "owner@example.com";
 delete process.env.DEMO_MODE;
+delete process.env.OPENAI_API_KEY;
 delete process.env.APP_BASE_URL;
 
 // ─── Fake Google token endpoint; the auth `code` picks the account ──────────
@@ -34,9 +35,30 @@ const GOOGLE_ACCOUNTS: Record<string, Record<string, unknown>> = {
   owner: { sub: "g-owner", email: "Owner@Example.com", email_verified: true, name: "Owner" },
   unverified: { sub: "g-unv", email: "unv@example.com", email_verified: false },
 };
+// Fake OpenAI chat completions for label scanning. A marker in the first
+// image's data picks the outcome.
+function fakeOpenAI(init?: RequestInit): Response {
+  const req = JSON.parse(String(init?.body));
+  const image: string = req.messages[1].content[1].image_url.url;
+  if (image.includes("FAIL")) return Response.json({ error: { message: "bad request" } }, { status: 400 });
+  const content = image.includes("NOTALABEL")
+    ? { isSupplementLabel: false }
+    : {
+        isSupplementLabel: true, supplementName: "Magnesium Glycinate", brand: "Acme", dosageAmount: 200,
+        dosageUnit: "mg", servingSize: "2 capsules", ingredients: ["Magnesium (as glycinate)"], confidence: 91,
+        suggestions: ["Take with food, as the label directs"],
+      };
+  return Response.json({
+    id: "chatcmpl-test", object: "chat.completion", created: 0, model: req.model,
+    choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(content) } }],
+  });
+}
+
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-  if (String(input) !== "https://oauth2.googleapis.com/token") return realFetch(input, init);
+  const url = input instanceof Request ? input.url : String(input);
+  if (url === "https://api.openai.com/v1/chat/completions") return fakeOpenAI(init);
+  if (url !== "https://oauth2.googleapis.com/token") return realFetch(input, init);
   const body = new URLSearchParams(String(init?.body));
   const code = body.get("code") ?? "";
   if (body.get("client_secret") !== "test-secret") return Response.json({ error: "invalid_client" }, { status: 401 });
@@ -64,12 +86,12 @@ function sessionCookie(res: Response): string | null {
   return c ? c.split(";")[0] : null;
 }
 
-function client(cookie: string | null): Api {
+function client(cookie: string | null, extraHeaders: Record<string, string> = {}): Api {
   return async (method, path, body) => {
     const res = await realFetch(base + path, {
       method,
       redirect: "manual",
-      headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
+      headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}), ...extraHeaders },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let parsed: unknown = null;
@@ -91,10 +113,10 @@ async function googleSignIn(code: string, opts: { tamperState?: boolean } = {}) 
   return { start, consentUrl, preCookie, status: cb.status, location: cb.headers.get("location"), cookie: sessionCookie(cb) };
 }
 
-async function signInAs(code: string): Promise<Api> {
+async function signInAs(code: string, extraHeaders: Record<string, string> = {}): Promise<Api> {
   const result = await googleSignIn(code);
   assert.equal(result.location, "/", `sign-in as ${code} failed: ${result.location}`);
-  return client(result.cookie);
+  return client(result.cookie, extraHeaders);
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -349,6 +371,70 @@ test("a new user's dashboard is empty", async () => {
   assert.equal(dash.latestShot, null);
   assert.equal(dash.glp1Adherence, 0);
   assert.equal(dash.latestWeight, null);
+});
+
+// ─── Time zones ──────────────────────────────────────────────────────────────
+test("'today' follows the browser's time zone, not UTC", async () => {
+  // UTC+14 and UTC-11: at any moment at least one is on a different date than UTC.
+  const utcToday = new Date().toISOString().slice(0, 10);
+  const localToday = (tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+  const tz = ["Pacific/Kiritimati", "Pacific/Pago_Pago"].find(z => localToday(z) !== utcToday)!;
+  const local = await signInAs("bob", { "X-Timezone": tz });
+  const r = await local("POST", "/api/glp1-logs", { date: localToday(tz), time: "21:00", drugName: "Zepbound", doseAmount: 5, doseUnit: "mg" });
+  assert.equal(r.status, 200);
+  assert.equal((await local("GET", "/api/analytics/dashboard")).body.todayShotLogged, true, `in ${tz}`);
+  assert.equal((await bob("GET", "/api/analytics/dashboard")).body.todayShotLogged, false, "UTC client sees a different day");
+  assert.equal((await client(null, { "X-Timezone": "Not/AZone" })("GET", "/api/drugs")).status, 200, "bad zone header is ignored");
+  await local("DELETE", `/api/glp1-logs/${r.body.id}`);
+});
+
+test("the user's time zone is saved for reminders and validated", async () => {
+  const ok = await bob("PATCH", "/api/user/settings", { timezone: "America/New_York" });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.timezone, "America/New_York");
+  assert.equal((await bob("PATCH", "/api/user/settings", { timezone: "Mars/Olympus_Mons" })).status, 400);
+});
+
+// ─── Uploads and label scanning ──────────────────────────────────────────────
+const jpeg = (marker = "", kb = 50) => `data:image/jpeg;base64,${marker}${"A".repeat(kb * 1024)}`;
+
+test("progress photos larger than 100 KB upload", async () => {
+  const r = await alice("POST", "/api/progress-photos", { date: today, weight: 218, photoUrl: jpeg("", 400) });
+  assert.equal(r.status, 200);
+});
+
+test("label scanning reports when OpenAI isn't configured", async () => {
+  const r = await alice("POST", "/api/scan-label", { images: [jpeg()] });
+  assert.equal(r.status, 503);
+});
+
+test("label scanning reads a label", async () => {
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const r = await alice("POST", "/api/scan-label", { images: [jpeg(), jpeg()] });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.supplementName, "Magnesium Glycinate");
+    assert.equal(r.body.dosageAmount, "200");
+    assert.equal(r.body.dosageUnit, "mg");
+    assert.equal(r.body.confidence, 91);
+    assert.equal("isSupplementLabel" in r.body, false);
+  } finally {
+    delete process.env.OPENAI_API_KEY;
+  }
+});
+
+test("label scanning rejects bad input and unreadable photos", async () => {
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    assert.equal((await alice("POST", "/api/scan-label", { images: [] })).status, 400);
+    assert.equal((await alice("POST", "/api/scan-label", { images: [jpeg(), jpeg(), jpeg(), jpeg()] })).status, 400);
+    assert.equal((await alice("POST", "/api/scan-label", { images: ["https://example.com/a.jpg"] })).status, 400);
+    assert.equal((await alice("POST", "/api/scan-label", { images: [jpeg("NOTALABEL")] })).status, 422);
+    assert.equal((await alice("POST", "/api/scan-label", { images: [jpeg("FAIL")] })).status, 502);
+    assert.equal((await anon()("POST", "/api/scan-label", { images: [jpeg()] })).status, 401);
+  } finally {
+    delete process.env.OPENAI_API_KEY;
+  }
 });
 
 // ─── Legacy hand-over and demo ───────────────────────────────────────────────

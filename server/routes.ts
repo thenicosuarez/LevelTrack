@@ -4,7 +4,10 @@ import { randomBytes } from "crypto";
 import { storage } from "./storage";
 import { processVoiceNoteAsync } from "./ai-processor";
 import { setupAuth } from "./auth";
+import { openaiConfigured } from "./openai";
+import { scanSupplementLabel, scanLabelRequestSchema, NotALabelError } from "./label-scan";
 import { computeShotAdherence } from "./adherence";
+import { isValidTimeZone, todayIn, zonedParts, shiftDate, reminderDueDate } from "./dates";
 import { z } from "zod";
 import webpush from "web-push";
 import { 
@@ -30,10 +33,16 @@ const DAY_ABBREVS: Record<string, number> = {
   Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
 };
 
-function isInjectionDayToday(injectionDay: string | null): boolean {
+function isInjectionDayToday(injectionDay: string | null, tz: string): boolean {
   if (!injectionDay) return false;
-  const todayNum = new Date().getDay();
-  return DAY_ABBREVS[injectionDay] === todayNum;
+  return DAY_ABBREVS[injectionDay] === zonedParts(tz).weekday;
+}
+
+// The browser sends its IANA time zone on every request so "today" matches
+// the user's calendar, not the server's UTC clock.
+function requestTimeZone(req: Request): string {
+  const tz = req.get("X-Timezone");
+  return isValidTimeZone(tz) ? tz : "UTC";
 }
 
 const updateUserSettingsSchema = z.object({
@@ -51,6 +60,7 @@ const updateUserSettingsSchema = z.object({
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   heightCm: z.number().positive().optional().nullable(),
   theme: z.enum(["light", "dark", "system"]).optional(),
+  timezone: z.string().refine(isValidTimeZone, "Unknown time zone").optional(),
 });
 
 const peptideCalcSchema = z.object({
@@ -172,10 +182,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const days = parseInt(req.query.days as string) || 30;
       const protocols = await storage.getProtocols(req.userId);
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDateObj = new Date();
-      startDateObj.setDate(startDateObj.getDate() - days);
-      const startDate = startDateObj.toISOString().split('T')[0];
+      const endDate = todayIn(requestTimeZone(req));
+      const startDate = shiftDate(endDate, -days);
       const allTasks = await storage.getTasks(req.userId);
       const relevantTasks = allTasks.filter(t => t.date >= startDate && t.date <= endDate);
       const complianceData: Record<number, { total: number; completed: number }> = {};
@@ -314,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/tasks/generate", async (req, res) => {
     try {
       const { date } = req.body;
-      const targetDate = date || new Date().toISOString().split('T')[0];
+      const targetDate = date || todayIn(requestTimeZone(req));
       const protocols = await storage.getProtocols(req.userId);
       const activeProtocols = protocols.filter(p => {
         if (p.startDate && p.startDate > targetDate) return false;
@@ -447,8 +455,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Dashboard analytics ──────────────────────────────────────────────────
   app.get("/api/analytics/dashboard", async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const today = todayIn(requestTimeZone(req));
+      const weekAgo = shiftDate(today, -7);
 
       const [user, todayTasks, weekTasks, healthMetrics, todayGlp1, recentGlp1, allMetrics, allPhotos] = await Promise.all([
         storage.getUser(req.userId),
@@ -516,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         latestWeight,
         totalWeightLost,
         weeklyData: Array.from({ length: 7 }, (_, i) => {
-          const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const date = shiftDate(today, -i);
           const dayTasks = weekTasks.filter(t => t.date === date);
           const dayCompleted = dayTasks.filter(t => t.completed).length;
           const dayTotal = dayTasks.length;
@@ -564,25 +572,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Label scanning ───────────────────────────────────────────────────────
   app.post("/api/scan-label", async (req, res) => {
+    if (!openaiConfigured()) {
+      return res.status(503).json({ error: "Label scanning isn't set up on this server (OPENAI_API_KEY missing)." });
+    }
+    const parsed = scanLabelRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Send 1-3 label photos as image data URLs." });
     try {
-      setTimeout(() => {
-        res.json({
-          supplementName: "Magnesium Glycinate",
-          brand: "Thorne",
-          dosageAmount: "200",
-          dosageUnit: "mg",
-          servingSize: "2 capsules",
-          ingredients: ["Magnesium Glycinate", "Hypromellose", "Microcrystalline Cellulose"],
-          confidence: 92,
-          suggestions: [
-            "Take with food for better absorption",
-            "Consider timing before bedtime for sleep benefits",
-            "Start with 1 capsule to assess tolerance"
-          ]
-        });
-      }, 1000);
+      res.json(await scanSupplementLabel(parsed.data.images));
     } catch (error) {
-      res.status(500).json({ error: "Failed to process label scan" });
+      if (error instanceof NotALabelError) {
+        return res.status(422).json({ error: "Couldn't read a supplement label in those photos. Try a closer, well-lit shot." });
+      }
+      console.error("Label scan failed:", error);
+      res.status(502).json({ error: "Label scanning failed. Please try again." });
     }
   });
 
@@ -652,7 +654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/side-effect-logs/today", async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayIn(requestTimeZone(req));
       const log = await storage.getTodaySideEffectLog(req.userId, today);
       res.json(log || null);
     } catch (error) {
@@ -774,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.userId);
       if (!user) return res.status(404).json({ error: "User not found" });
       if (!user.reminderEnabled) return res.json({ sent: false, reason: "reminders disabled" });
-      if (!isInjectionDayToday(user.glp1InjectionDay)) {
+      if (!isInjectionDayToday(user.glp1InjectionDay, requestTimeZone(req))) {
         return res.json({ sent: false, reason: "not injection day" });
       }
 
@@ -809,7 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = await storage.getUser(req.userId);
       if (!user) return res.json({ isInjectionDay: false });
-      res.json({ isInjectionDay: isInjectionDayToday(user.glp1InjectionDay) });
+      res.json({ isInjectionDay: isInjectionDayToday(user.glp1InjectionDay, requestTimeZone(req)) });
     } catch (error) {
       res.status(500).json({ error: "Failed to check injection day" });
     }
@@ -818,6 +820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ─── Peptide Calculator routes ────────────────────────────────────────────
   app.get("/api/peptide-calcs", async (req, res) => {
     try {
+      const tz = requestTimeZone(req);
       const calcs = await storage.getPeptideCalculations(req.userId);
       const withLogs = await Promise.all(calcs.map(async (calc) => {
         const logs = await storage.getVialLogs(calc.id);
@@ -826,7 +829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const logDates = Array.from(new Set(
           logs
             .filter(l => l.loggedAt != null)
-            .map(l => new Date(l.loggedAt!).toISOString().split("T")[0])
+            .map(l => todayIn(tz, new Date(l.loggedAt!)))
         )).sort().reverse(); // most recent first
 
         let streak = 0;
@@ -837,9 +840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           for (const d of logDates) {
             if (d === expected) {
               streak++;
-              const prev = new Date(expected);
-              prev.setDate(prev.getDate() - 1);
-              expected = prev.toISOString().split("T")[0];
+              expected = shiftDate(expected, -1);
             } else if (d < expected) {
               break;
             }
@@ -1216,21 +1217,19 @@ export function startReminderScheduler(): void {
   const tick = async () => {
     try {
       const now = new Date();
-      const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const today = now.toISOString().split("T")[0];
 
-      // Reset the dedup set each day
-      const dayPrefix = `${today}:`;
+      // Forget dedup entries older than yesterday (UTC); local dates span ±1 day.
+      const oldest = shiftDate(todayIn("UTC", now), -1);
       for (const key of notifiedToday) {
-        if (!key.startsWith(dayPrefix)) notifiedToday.delete(key);
+        if (key.slice(0, 10) < oldest) notifiedToday.delete(key);
       }
 
       const users = await storage.getUsersWithRemindersEnabled();
       for (const user of users) {
-        if (!user.reminderTime || user.reminderTime !== currentHHMM) continue;
-        if (!isInjectionDayToday(user.glp1InjectionDay)) continue;
+        const localDate = reminderDueDate(user, now);
+        if (!localDate) continue;
 
-        const dedupKey = `${today}:${user.id}`;
+        const dedupKey = `${localDate}:${user.id}`;
         if (notifiedToday.has(dedupKey)) continue;
         notifiedToday.add(dedupKey);
 

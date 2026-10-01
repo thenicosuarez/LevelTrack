@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Syringe, Calendar, Scale, ChevronRight, ChevronLeft, Check } from "lucide-react";
 import type { User } from "@shared/schema";
 import { kgToLbs } from "@/lib/weight-utils";
+import { todayLocal } from "@/lib/date-utils";
 
 const INJECTION_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const NONE = "__none__";
@@ -112,7 +113,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
       });
 
       if (weightLbs != null) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
         await apiRequest("POST", "/api/progress-photos", {
           date: today,
           weight: weightLbs,

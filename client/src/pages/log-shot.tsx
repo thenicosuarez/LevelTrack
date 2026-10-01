@@ -15,6 +15,7 @@ import { Syringe, Trash2, CheckCircle2, Clock, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Glp1Log } from "@shared/schema";
+import { todayLocal } from "@/lib/date-utils";
 
 interface Drug {
   name: string;
@@ -98,7 +99,7 @@ export default function LogShot() {
     queryKey: ["/api/glp1-logs"],
   });
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocal();
   const todayLog = logs.find((l) => l.date === today);
 
   const {

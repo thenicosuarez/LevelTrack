@@ -1,4 +1,11 @@
 import { QueryCache, MutationCache, QueryClient, QueryFunction } from "@tanstack/react-query";
+import { browserTimeZone } from "@/lib/date-utils";
+
+// Lets the server work out "today" in the user's own time zone.
+function tzHeader(): Record<string, string> {
+  const tz = browserTimeZone();
+  return tz ? { "X-Timezone": tz } : {};
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -14,7 +21,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: { ...tzHeader(), ...(data ? { "Content-Type": "application/json" } : {}) },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -30,6 +37,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
+      headers: tzHeader(),
       credentials: "include",
     });
 

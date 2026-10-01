@@ -1,6 +1,8 @@
 import { Switch, Route, Redirect } from "wouter";
-import { queryClient, getQueryFn } from "./lib/queryClient";
+import { useEffect } from "react";
+import { queryClient, getQueryFn, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { browserTimeZone } from "@/lib/date-utils";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -22,6 +24,17 @@ function AuthGate() {
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
+
+  // Keep the stored time zone current so reminders fire on the user's clock.
+  useEffect(() => {
+    const tz = browserTimeZone();
+    if (user && tz && user.timezone !== tz) {
+      apiRequest("PATCH", "/api/user/settings", { timezone: tz })
+        .then(res => res.json())
+        .then(updated => queryClient.setQueryData(["/api/user"], updated))
+        .catch(() => { /* non-critical; retried on next load */ });
+    }
+  }, [user?.id, user?.timezone]);
 
   if (isLoading) {
     return <div className="mobile-container min-h-screen" aria-busy="true" />;

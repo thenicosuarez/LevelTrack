@@ -1,18 +1,7 @@
-import OpenAI from "openai";
+import { getOpenAI } from "./openai";
 import { storage } from "./storage";
 import fs from "fs";
 import path from "path";
-
-// Created on first use so the server can start without OPENAI_API_KEY;
-// only voice-note processing needs it.
-let openaiClient: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not set — voice note processing is disabled");
-  }
-  openaiClient ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openaiClient;
-}
 
 export async function processVoiceNoteAsync(voiceNoteId: number, userId: number, audioData: string) {
   try {

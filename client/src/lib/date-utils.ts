@@ -1,5 +1,22 @@
+// YYYY-MM-DD in the browser's local time zone. (toISOString() is UTC, which
+// puts a US evening on tomorrow's date.)
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function todayLocal(): string {
+  return formatDate(new Date());
+}
+
+export function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
 }
 
 export function formatTime(time: string): string {

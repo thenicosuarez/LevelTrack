@@ -9,36 +9,20 @@ import { log } from "./vite";
 export async function createApp(): Promise<{ app: express.Express; server: Server }> {
   const app = express();
   app.set("trust proxy", 1); // Correctly read X-Forwarded-Proto from reverse proxy
-  app.use(express.json());
+  // Room for compressed photos (progress photos, up to 3 label photos).
+  app.use(express.json({ limit: "12mb" }));
   app.use(express.urlencoded({ extended: false }));
 
+  // Request log: method, path, status and timing only. Response bodies hold
+  // health data and are deliberately not logged.
   app.use((req, res, next) => {
     const start = Date.now();
     const path = req.path;
-    let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-    const originalResJson = res.json;
-    res.json = function (bodyJson, ...args) {
-      capturedJsonResponse = bodyJson;
-      return originalResJson.apply(res, [bodyJson, ...args]);
-    };
-
     res.on("finish", () => {
-      const duration = Date.now() - start;
       if (path.startsWith("/api")) {
-        let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-        if (capturedJsonResponse) {
-          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-        }
-
-        if (logLine.length > 80) {
-          logLine = logLine.slice(0, 79) + "…";
-        }
-
-        log(logLine);
+        log(`${req.method} ${path} ${res.statusCode} in ${Date.now() - start}ms`);
       }
     });
-
     next();
   });
 

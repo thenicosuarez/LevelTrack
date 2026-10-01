@@ -9,6 +9,7 @@ import { BookOpen, CheckCircle2, Edit3, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { SideEffectLog } from "@shared/schema";
+import { todayLocal } from "@/lib/date-utils";
 
 interface SymptomConfig {
   key: keyof SymptomScores;
@@ -167,7 +168,7 @@ function HistoryEntry({ log }: { log: SideEffectLog }) {
 export default function Journal() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocal();
 
   const [scores, setScores] = useState<SymptomScores>({ ...DEFAULT_SCORES });
   const [note, setNote] = useState("");
